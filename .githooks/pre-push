@@ -1,0 +1,45 @@
+#!/bin/sh
+# Pre-push hook: run eslint --fix; refuse the push if any errors remain
+# or if --fix touched files that haven't been staged + committed.
+#
+# Installed by the npm "prepare" script (git config core.hooksPath .githooks).
+
+set -e
+
+# Skip in CI — the CI workflow runs lint explicitly and we don't want the
+# hook to interfere with workflows that push (release commits/tags, etc.).
+if [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    exit 0
+fi
+
+# Allow opting out for emergency pushes:  GREE_SKIP_LINT=1 git push ...
+if [ "${GREE_SKIP_LINT:-}" = "1" ]; then
+    echo "[pre-push] GREE_SKIP_LINT=1 set — skipping lint check"
+    exit 0
+fi
+
+# Skip if eslint isn't installed (e.g. fresh clone before npm install).
+if [ ! -x "node_modules/.bin/eslint" ]; then
+    echo "[pre-push] eslint not installed (run 'npm install' first) — skipping"
+    exit 0
+fi
+
+echo "[pre-push] running eslint --fix..."
+if ! npx --no-install eslint --fix ./; then
+    echo
+    echo "[pre-push] eslint reported errors that --fix could not resolve."
+    echo "[pre-push] Fix them and commit, or set GREE_SKIP_LINT=1 to push anyway."
+    exit 1
+fi
+
+# If --fix produced changes, refuse the push so the user can review + stage them.
+if ! git diff --quiet; then
+    echo
+    echo "[pre-push] eslint --fix modified files. Review and commit them:"
+    git --no-pager diff --stat
+    echo
+    echo "[pre-push] Aborting push. Commit the changes and push again."
+    exit 1
+fi
+
+exit 0
