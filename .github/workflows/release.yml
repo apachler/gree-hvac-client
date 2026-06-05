@@ -36,3 +36,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Publish with npm provenance (signed build attestation). Requires the
+          # id-token: write permission above and a public package whose
+          # repository field matches this repo.
+          NPM_CONFIG_PROVENANCE: true
