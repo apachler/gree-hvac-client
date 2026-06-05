@@ -22,60 +22,102 @@ Effort: **S** (< 1h) · **M** (a few hours) · **L** (a day+).
   `trailingComma: "all"`) — run `lint:fix` and review the reformat in an
   isolated commit, separate from feature work.
 
-### 2. Reconcile the CI Node matrix with `engines.node`
+### 2. Codecov badge + PR coverage summary
 - **Priority:** P3 · **Effort:** S
-- **Rationale:** `package.json` declares `engines.node >= 16` but `ci.yml` still
-  tests Node **14**. Either drop 14 from the matrix or lower `engines` — they
-  should agree.
+- **Rationale:** A Jest `coverageThreshold` gate is now in place (token-free,
+  fails CI on regression). What's still missing is a *visible* badge and an
+  in-PR summary.
+- **Implementation:** Either upload `coverage/lcov.info` to Codecov (needs
+  `CODECOV_TOKEN`) for a trend badge, or pipe the `jest --coverage` text report
+  into `$GITHUB_STEP_SUMMARY` in the `coverage` job (zero new services).
+- **Impact:** Reviewer ergonomics + an at-a-glance quality signal. Raise the
+  thresholds in `jest.config.js` toward the current ~88% as coverage improves.
 
----
-
-## P2 — Quality & observability
-
-### 3. Coverage gate + badge
-- **Priority:** P2 · **Effort:** M
-- **Rationale:** CI now runs `jest --coverage` (the `coverage` job), but there's
-  no enforced threshold or visible badge, so coverage can erode silently.
-- **Implementation:** Either (a) add Jest `coverageThreshold` (e.g. lines 70%,
-  tuned to current numbers) to fail CI on regressions, token-free; or (b) upload
-  `coverage/lcov.info` to Codecov and add the badge. Surface the text summary in
-  `$GITHUB_STEP_SUMMARY` for reviewer ergonomics.
-
-### 4. Ship TypeScript type definitions
+### 3. Ship TypeScript type definitions + `tsc --checkJs`
 - **Priority:** P2 · **Effort:** M
 - **Rationale:** A protocol client is frequently consumed from TypeScript. There
-  are no `.d.ts` files today, so consumers get `any`.
-- **Implementation:** Either hand-write `index.d.ts` (Client, PROPERTY, VALUE,
-  options, events) or generate from JSDoc with `tsc --declaration --allowJs
-  --emitDeclarationOnly`. Add `"types"` to `package.json` and to the `files`
-  allowlist.
+  are no `.d.ts` files today, so consumers get `any`. Type-checking the JS via
+  JSDoc would also catch a class of bugs at build time.
+- **Implementation:** Add a `jsconfig.json`/`tsconfig.json` with
+  `checkJs: true`, generate declarations with `tsc --declaration --allowJs
+  --emitDeclarationOnly` into `dist/types`, add `"types"` to `package.json` and
+  the `files` allowlist, and add a `typecheck` CI job. Expect to fix a handful
+  of JSDoc type issues on first run — do it in an isolated commit.
+- **Impact:** First-class TS DX; compile-time safety on the JS itself.
+
+### 3a. De-flake the reconnect test
+- **Priority:** P2 · **Effort:** S
+- **Rationale:** `test/client.spec.js` → "should reconnect if not connected"
+  uses `connectTimeout: 1` (ms) against a real `localhost` socket and asserts
+  three consecutive timeouts. It is timing-racy and fails intermittently
+  (~1 in 5 local runs) — a flaky test erodes trust in CI.
+- **Implementation:** Drive it with Jest fake timers and the existing
+  `test/support/device.js` mock instead of a real socket + 1 ms timeout, so the
+  reconnect sequence is deterministic.
+- **Impact:** Reliable CI; no spurious red builds.
+
+### 4. Upgrade ESLint 8 → 9 (flat config) and Prettier 2 → 3
+- **Priority:** P2 · **Effort:** M
+- **Rationale:** ESLint 8 is end-of-life; Prettier 2 is a major behind. Flat
+  config (`eslint.config.js`) is the supported path forward.
+- **Implementation:** Migrate `.eslintrc.js` → `eslint.config.js`; bump
+  `eslint@9`, `eslint-plugin-jsdoc`, `eslint-config-prettier@9`,
+  `eslint-plugin-prettier@5`, `prettier@3`. Prettier 3 changes defaults (e.g.
+  `trailingComma: "all"`) — run `lint:fix` and review the reformat in an
+  isolated commit, separate from feature work.
 
 ---
 
 ## P2 — Security & supply chain
 
-### 5. SHA-pin GitHub Actions
+### 5. SBOM generation on release
+- **Priority:** P2 · **Effort:** S
+- **Rationale:** A Software Bill of Materials is increasingly expected for
+  supply-chain transparency (SLSA, enterprise procurement).
+- **Implementation:** Add `anchore/sbom-action` to emit a CycloneDX/SPDX SBOM.
+  Because semantic-release creates the GitHub Release, the simplest path is a
+  `@semantic-release/exec` step that generates the SBOM and a
+  `@semantic-release/github` `assets` entry to attach it — or a separate job
+  triggered on the published tag.
+- **Impact:** Downstream consumers can audit the dependency tree.
+
+### 6. SHA-pin GitHub Actions
 - **Priority:** P2 · **Effort:** M
 - **Rationale:** Actions are pinned to major tags (`@v4`). A compromised/retagged
-  action could run arbitrary code in CI.
+  action could run arbitrary code in CI. (OpenSSF Scorecard flags this.)
 - **Implementation:** Pin every `uses:` to a full commit SHA with a trailing
   `# vX.Y.Z` comment; Dependabot's `github-actions` ecosystem keeps them current.
   (Tradeoff: noisier Dependabot PRs — deferred on that basis.)
 
-### 6. npm publish provenance
-- **Priority:** P3 · **Effort:** S
-- **Status:** `release.yml` already grants `id-token: write`. To emit provenance,
-  ensure `@semantic-release/npm` publishes with `--provenance` (or set
-  `NPM_CONFIG_PROVENANCE=true`) once the npm package is linked to this repo.
-- **Impact:** Verifiable build origin on npm; supply-chain friendly.
+### 7. Secret scanning
+- **Priority:** P2 · **Effort:** S
+- **Rationale:** No automated check stops a credential from being committed.
+- **Implementation:** Enable GitHub's native **secret scanning + push
+  protection** (Settings → Code security — free for public repos, zero CI cost),
+  and/or add a `gitleaks` CI job for defence in depth.
+- **Impact:** Prevents the most common and damaging leak class.
 
 ---
 
 ## P3 — Documentation & community
 
-### 7. FUNDING.yml
+### 8. ROADMAP.md / GOVERNANCE.md
+- **Priority:** P3 · **Effort:** S
+- **Rationale:** Useful once there are multiple maintainers or external demand.
+  Low value at current single-maintainer scale — premature docs go stale.
+- **Implementation:** Add when a second maintainer joins or a public roadmap is
+  requested.
+
+### 9. FUNDING.yml
 - **Priority:** P3 · **Effort:** S
 - Add `.github/FUNDING.yml` if the maintainer wants a "Sponsor" button.
+
+### 10. Issue/PR triage automation (stale + lock)
+- **Priority:** P3 · **Effort:** S
+- **Rationale:** Keeps the tracker tidy as volume grows.
+- **Implementation:** `actions/stale` (mark/close inactive issues) and
+  `dessant/lock-threads` (lock very old closed threads). Tune timings to be
+  non-aggressive. Only worth it once issue volume justifies it.
 
 ---
 
@@ -119,3 +161,20 @@ out:
 - **`package.json`:** fixed stale `repository.url` (`inwaar` → `apachler`), added
   `bugs`/`homepage`, `prepare`/`lint:fix`/`test:coverage`/`audit` scripts,
   commitlint + semantic-release plugin devDeps, `CHANGELOG.md` in `files`.
+- **`docs/PROTOCOL.md`:** full Gree UDP/AES protocol reference (verified against
+  `src/`), plus `.gitignore` updates (`.idea/`, `*.tmp.*`).
+
+## Already implemented (senior-maintainer audit pass, 2026-06-05)
+
+- **Bug fix:** corrected the `GREE_HVAC_POLL**L**ING_TIMEOUT` typo in
+  `client-options.js` — the `pollingTimeout` env override was silently dead.
+- **Coverage gate:** `jest.config.js` with `coverageThreshold`
+  (85/70/80/85, scoped to `src/`), enforced in the CI `coverage` job; `npm test`
+  stays fast (gate only runs under `--coverage`). Current ~88% lines.
+- **CI matrix:** dropped EOL Node 14 (below `engines>=16`), added Node 24.
+- **Supply chain:** npm publish provenance (`NPM_CONFIG_PROVENANCE=true` in
+  `release.yml`, using the existing `id-token: write`); OpenSSF **Scorecard**
+  workflow + README badge.
+- **Onboarding:** `.env.example` documenting every `GREE_HVAC_*` override.
+- **README:** added Configuration / Development / Contributing / Security
+  sections and Scorecard + code-style badges (regenerated from `README.hbs`).
