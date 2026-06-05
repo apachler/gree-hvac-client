@@ -1,7 +1,10 @@
 # Gree HVAC client
 
 ![NPM status](https://img.shields.io/npm/v/gree-hvac-client)
-![Github Actions status](https://img.shields.io/github/actions/workflow/status/inwaar/gree-hvac-client/release.yml?label=release)
+![CI status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/ci.yml?label=ci)
+![CodeQL status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/codeql.yml?label=codeql)
+![Release status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/release.yml?label=release)
+![License](https://img.shields.io/npm/l/gree-hvac-client)
 
 A client for communicating with Gree air conditioners.
 
@@ -54,6 +57,9 @@ client.on('no_response', () => {
 ```
 
 ## Properties
+
+> For the full protocol — encryption, message flow, vendor codes and the
+> `TemSen +40` quirk — see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 | Command | Values | Description |
 |-|-|-|
