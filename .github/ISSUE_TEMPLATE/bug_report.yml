@@ -41,7 +41,7 @@ body:
     attributes:
       label: Package version
       description: "Output of `npm ls gree-hvac-client`"
-      placeholder: "2.2.0"
+      placeholder: "3.0.0"
     validations:
       required: true
   - type: input
