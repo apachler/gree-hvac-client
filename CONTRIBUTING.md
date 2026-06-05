@@ -86,15 +86,20 @@ Before opening a PR:
    regenerated `README.md`.
 3. Update docs when behaviour changes.
 
+`CHANGELOG.md` is generated automatically by semantic-release — don't edit it by
+hand. Just write [Conventional Commits](https://www.conventionalcommits.org/) and
+the changelog and version follow.
+
 ## Releasing
 
 Releases are fully automated. Merging Conventional-Commit history to `master`
 runs [`semantic-release`](https://semantic-release.gitbook.io/): it computes the
-next version from the commits, updates `CHANGELOG.md` and `package.json`, tags
-the release, and creates the **GitHub Release** with the packed `.tgz` attached
-as an asset. **This fork does not publish to the npm registry** — it ships via
-Git + GitHub Releases. **Do not bump `version` in `package.json` by hand**;
-semantic-release owns it.
+next version, updates `CHANGELOG.md` + `package.json` and commits them back with
+a `[skip ci]` message (so the bot's own commit doesn't trigger another release —
+only your merges do), creates the git **tag** and the **GitHub Release**, and
+attaches the packed `.tgz` as an asset. **This fork does not publish to the npm
+registry** — it ships via Git + GitHub Releases. **Do not bump `version` or edit
+`CHANGELOG.md` by hand**; semantic-release owns them.
 
 ## Reporting bugs & asking questions
 

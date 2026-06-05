@@ -80,13 +80,13 @@ quirk): **[`docs/PROTOCOL.md`](docs/PROTOCOL.md)**. Key points:
 
 Fully automated via **semantic-release** (`release.yml` on push to `master`,
 config in `.releaserc.json`). It reads Conventional-Commit history, computes the
-next version, updates `CHANGELOG.md` + `package.json`, tags, and creates the
-**GitHub Release** with the packed `.tgz` attached. **This fork does not publish
-to npm** — it ships via Git + GitHub Releases (`@semantic-release/npm` runs with
-`npmPublish: false`, only to bump the version and pack the tarball). **Do not
-hand-edit `version`** — semantic-release owns it; `package.json` + `CHANGELOG.md`
-are committed back (with `[skip ci]`). A `commit-msg` hook runs commitlint
-locally so malformed messages can't silently skip a release.
+next version, updates `CHANGELOG.md` + `package.json` and commits them back with
+`[skip ci]` (so the bot commit doesn't re-trigger a release — only your merges
+do), creates the **git tag** and the **GitHub Release**, and attaches the packed
+`.tgz`. **This fork does not publish to npm** — `@semantic-release/npm` runs with
+`npmPublish: false` only to bump the version and pack the tarball. **Do not
+hand-edit `version` or `CHANGELOG.md`** — semantic-release owns them. A
+`commit-msg` hook runs commitlint locally.
 
 Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git ref
 (`github:apachler/gree-hvac-client#vX.Y.Z`) — see the README.
