@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a problem with the gree-hvac-client library
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please fill in as much as you
+        can — a minimal reproduction (see the `example/` scripts) is especially
+        helpful. For security issues, **do not** use this form — see our
+        [security policy](https://github.com/apachler/gree-hvac-client/security/policy).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps or a small script (the `example/` files are a good base).
+      placeholder: |
+        1. new Gree.Client({ host: ... })
+        2. client.setProperty(...)
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug logs
+      description: >
+        Output with debug logging enabled (`GREE_HVAC_LOG_LEVEL=debug` or
+        `logLevel: 'debug'`). Redact IPs/MACs if needed.
+      render: text
+  - type: input
+    id: pkg-version
+    attributes:
+      label: Package version
+      description: "Output of `npm ls gree-hvac-client`"
+      placeholder: "3.0.0"
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: "v20.11.0"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Gree model / firmware (if hardware-related)
+      placeholder: "e.g. GWH09 / firmware 1.x"
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I'm using the latest released version
+          required: true
+        - label: I searched existing issues for duplicates
+          required: true

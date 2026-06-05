@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / help
+    url: https://github.com/apachler/gree-hvac-client/discussions
+    about: For usage questions and how-to help, please start a Discussion.
+  - name: Security vulnerability
+    url: https://github.com/apachler/gree-hvac-client/security/policy
+    about: Please report security issues privately — do not open a public issue.
+  - name: Protocol & property reference
+    url: https://github.com/apachler/gree-hvac-client/blob/master/docs/PROTOCOL.md
+    about: What each Gree property/value means, before filing a bug.

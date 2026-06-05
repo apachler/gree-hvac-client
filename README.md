@@ -1,7 +1,12 @@
 # Gree HVAC client
 
-![NPM status](https://img.shields.io/npm/v/gree-hvac-client)
-![Github Actions status](https://img.shields.io/github/actions/workflow/status/inwaar/gree-hvac-client/release.yml?label=release)
+![GitHub release](https://img.shields.io/github/v/release/apachler/gree-hvac-client?sort=semver)
+![CI status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/ci.yml?label=ci)
+![CodeQL status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/codeql.yml?label=codeql)
+![Release status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/release.yml?label=release)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/apachler/gree-hvac-client/badge)](https://securityscorecards.dev/viewer/?uri=github.com/apachler/gree-hvac-client)
+![License](https://img.shields.io/github/license/apachler/gree-hvac-client)
+![Code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)
 
 A client for communicating with Gree air conditioners.
 
@@ -11,11 +16,33 @@ A client for communicating with Gree air conditioners.
 
 ## Installation
 
-`yarn add gree-hvac-client`
+This fork is distributed via **Git + GitHub Releases** (not the npm registry,
+where the `gree-hvac-client` name belongs to the upstream project). Pin a release
+tag.
 
-or
+**Recommended — install the packed tarball** from the GitHub Release (a
+self-contained npm tarball; needs no git, no build step, ideal for Docker /
+air-gapped builds):
 
-`npm install --save gree-hvac-client`
+```shell
+npm install https://github.com/apachler/gree-hvac-client/releases/download/v3.0.0/gree-hvac-client-3.0.0.tgz
+```
+
+**Or install the Git ref** (npm clones the repo at the tag):
+
+```shell
+npm install github:apachler/gree-hvac-client#v3.0.0
+```
+
+Either way you can pin it in `package.json`:
+
+```json
+{
+  "dependencies": {
+    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v3.0.0/gree-hvac-client-3.0.0.tgz"
+  }
+}
+```
 
 
 ## Simple usage
@@ -54,6 +81,9 @@ client.on('no_response', () => {
 ```
 
 ## Properties
+
+> For the full protocol — encryption, message flow, vendor codes and the
+> `TemSen +40` quirk — see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 | Command | Values | Description |
 |-|-|-|
@@ -541,6 +571,37 @@ Device properties constants
 
 ## PropertyMap : <code>Object.&lt;PROPERTY, (PROPERTY\_VALUE\|number)&gt;</code>
 **Kind**: global typedef  
+
+## Configuration
+
+Every client option can also be set via a `GREE_HVAC_*` environment variable.
+See [`.env.example`](.env.example) for the full list and defaults.
+
+## Development
+
+```bash
+git clone https://github.com/apachler/gree-hvac-client.git
+cd gree-hvac-client
+npm install        # also installs the git hooks (lint + commit-msg)
+npm test           # Jest unit tests
+npm run lint       # ESLint + Prettier
+npm run docs       # regenerate README.md from README.hbs
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, coding standards
+and the [Gree protocol reference](docs/PROTOCOL.md).
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE_OF_CONDUCT.md). Commits follow
+[Conventional Commits](https://www.conventionalcommits.org/); releases are
+automated with semantic-release.
+
+## Security
+
+Found a vulnerability? Please follow [SECURITY.md](SECURITY.md) — do **not** open
+a public issue.
 
 ## License
 

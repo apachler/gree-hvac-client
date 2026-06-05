@@ -43,7 +43,7 @@ const createOptions = options => {
         autoConnect: process.env.GREE_HVAC_AUTO_CONNECT,
         poll: process.env.GREE_HVAC_POLL,
         pollingInterval: process.env.GREE_HVAC_POLLING_INTERVAL,
-        pollingTimeout: process.env.GREE_HVAC_POLLLING_TIMEOUT,
+        pollingTimeout: process.env.GREE_HVAC_POLLING_TIMEOUT,
         logLevel: process.env.GREE_HVAC_LOG_LEVEL,
         debug: process.env.GREE_HVAC_DEBUG,
     });

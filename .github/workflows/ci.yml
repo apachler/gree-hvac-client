@@ -4,15 +4,25 @@ on:
   push:
   pull_request:
 
+# Least-privilege default: jobs only read the repo unless they opt into more.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
+          cache: "npm"
       - run: npm ci
       - run: npm run lint
 
@@ -21,12 +31,37 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [14, 16, 18, 20, 22]
+        # Aligned with engines.node (>=16). 14 is EOL and below the floor.
+        node-version: [16, 18, 20, 22, 24]
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
       - run: npm ci
       - run: npm test
+
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: "npm"
+      - run: npm ci
+      - run: npm run test:coverage
+
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      - run: npm ci
+      # Fail only on HIGH/CRITICAL advisories in production dependencies.
+      - run: npm run audit

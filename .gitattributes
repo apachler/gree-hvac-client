@@ -1,0 +1,18 @@
+# Normalize line endings: LF in the repo, regardless of contributor OS.
+* text=auto eol=lf
+
+# Shell scripts and the git hook must stay LF even on Windows checkouts.
+*.sh text eol=lf
+.githooks/* text eol=lf
+
+# Treat binary assets as binary (no EOL/diff munging).
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.tgz binary
+
+# Keep generated/large files out of language stats and collapse them in diffs.
+package-lock.json linguist-generated=true
+# README.md is generated from README.hbs via `npm run docs`.
+README.md linguist-generated=true

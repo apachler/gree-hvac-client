@@ -1,0 +1,18 @@
+#!/bin/sh
+# Validate the commit message against Conventional Commits (commitlint).
+# Installed by the npm "prepare" script (git config core.hooksPath .githooks).
+#
+# semantic-release uses these messages to pick the next version and build the
+# changelog, so a malformed message can silently skip a release.
+
+# Honour the same escape hatch as the pre-push hook.
+if [ "${GREE_SKIP_LINT:-}" = "1" ]; then
+    exit 0
+fi
+
+# Skip if commitlint isn't installed yet (fresh clone before npm install).
+if [ ! -x "node_modules/.bin/commitlint" ]; then
+    exit 0
+fi
+
+npx --no-install commitlint --edit "$1"
