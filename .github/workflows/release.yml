@@ -5,13 +5,13 @@ on:
     branches:
       - master
 
-# semantic-release needs to push the changelog commit + tag, create the GitHub
-# Release, and comment on released issues/PRs. id-token enables npm provenance.
+# semantic-release needs to push the release commit + tag, create the GitHub
+# Release (with the packed .tgz asset), and comment on released issues/PRs.
+# No npm publish — this fork ships via Git + GitHub Releases only.
 permissions:
   contents: write
   issues: write
   pull-requests: write
-  id-token: write
 
 # Never cancel an in-flight release.
 concurrency:
@@ -35,8 +35,3 @@ jobs:
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-          # Publish with npm provenance (signed build attestation). Requires the
-          # id-token: write permission above and a public package whose
-          # repository field matches this repo.
-          NPM_CONFIG_PROVENANCE: true

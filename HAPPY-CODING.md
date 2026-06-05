@@ -10,6 +10,42 @@ Effort: **S** (< 1h) · **M** (a few hours) · **L** (a day+).
 
 ---
 
+## P1 — First fork release (3.0.0) — runbook (do when ready)
+
+The fork ships via **Git + GitHub Releases only** (no npm — the name is owned
+upstream). `.releaserc.json` and `release.yml` are already wired for this:
+`@semantic-release/npm` runs with `npmPublish: false` (bumps version + packs the
+`.tgz`), `@semantic-release/github` attaches the tarball, `@semantic-release/git`
+commits `package.json` + `CHANGELOG.md`.
+
+semantic-release derives the version from the **last git tag + commits since**.
+There are **no tags yet**, so without a baseline the first release would be
+forced to `1.0.0`. To land on **3.0.0**:
+
+1. **Merge** `feature/happy-coding` → `master` (it carries the `feat!` /
+   `BREAKING CHANGE` fork commit).
+2. **Create + push the baseline tag** at the pre-fork point so semantic-release
+   counts `2.2.0 → 3.0.0`:
+   ```sh
+   git tag v2.2.0 <master-base-commit>   # e.g. 68261ef, the commit before the fork work
+   git push origin v2.2.0
+   ```
+   (Pushing a tag does **not** trigger a release — `release.yml` runs on push to
+   `master`.)
+3. **Trigger the release**: push `master` (and approve the `release` environment
+   if the gate is enabled). semantic-release then: bumps to `3.0.0`, writes
+   `CHANGELOG.md`, tags `v3.0.0`, creates the GitHub Release with
+   `gree-hvac-client-3.0.0.tgz` attached, and commits the version bump back.
+4. **Branch protection note:** if `master` is protected, the
+   `@semantic-release/git` push-back needs a PAT or a bypass rule, else the
+   release step fails after creating the GitHub Release.
+
+Consumption after release (for node-red etc.):
+`npm i https://github.com/apachler/gree-hvac-client/releases/download/v3.0.0/gree-hvac-client-3.0.0.tgz`
+or `npm i github:apachler/gree-hvac-client#v3.0.0`.
+
+---
+
 ## P2 — Tooling & developer experience
 
 ### 1. Upgrade ESLint 8 → 9 (flat config) and Prettier 2 → 3
@@ -172,9 +208,9 @@ out:
   (85/70/80/85, scoped to `src/`), enforced in the CI `coverage` job; `npm test`
   stays fast (gate only runs under `--coverage`). Current ~88% lines.
 - **CI matrix:** dropped EOL Node 14 (below `engines>=16`), added Node 24.
-- **Supply chain:** npm publish provenance (`NPM_CONFIG_PROVENANCE=true` in
-  `release.yml`, using the existing `id-token: write`); OpenSSF **Scorecard**
-  workflow + README badge.
+- **Supply chain:** OpenSSF **Scorecard** workflow + README badge. (npm publish
+  provenance was added then removed when the fork chose Git + GitHub Releases
+  over npm — provenance is npm-only.)
 - **Onboarding:** `.env.example` documenting every `GREE_HVAC_*` override.
 - **README:** added Configuration / Development / Contributing / Security
   sections and Scorecard + code-style badges (regenerated from `README.hbs`).

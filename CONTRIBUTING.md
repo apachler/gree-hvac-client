@@ -90,9 +90,11 @@ Before opening a PR:
 
 Releases are fully automated. Merging Conventional-Commit history to `master`
 runs [`semantic-release`](https://semantic-release.gitbook.io/): it computes the
-next version, updates `CHANGELOG.md`, tags the release, publishes to npm, and
-creates the GitHub Release. **Do not bump `version` in `package.json` by hand**
-(it stays at `0.0.0-development`).
+next version from the commits, updates `CHANGELOG.md` and `package.json`, tags
+the release, and creates the **GitHub Release** with the packed `.tgz` attached
+as an asset. **This fork does not publish to the npm registry** — it ships via
+Git + GitHub Releases. **Do not bump `version` in `package.json` by hand**;
+semantic-release owns it.
 
 ## Reporting bugs & asking questions
 

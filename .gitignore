@@ -63,3 +63,6 @@ typings/
 # Stray temp files (e.g. generated-doc scratch files)
 *.tmp.*
 
+# semantic-release packs the release tarball here before attaching it to the GitHub Release
+pack/
+

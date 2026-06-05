@@ -80,16 +80,22 @@ quirk): **[`docs/PROTOCOL.md`](docs/PROTOCOL.md)**. Key points:
 
 Fully automated via **semantic-release** (`release.yml` on push to `master`,
 config in `.releaserc.json`). It reads Conventional-Commit history, computes the
-next version, updates `CHANGELOG.md`, publishes to npm, and creates the GitHub
-Release. **Do not hand-edit `version`** — it stays `0.0.0-development`; only
-`CHANGELOG.md` is committed back (with `[skip ci]`). A `commit-msg` hook runs
-commitlint locally so malformed messages can't silently skip a release.
+next version, updates `CHANGELOG.md` + `package.json`, tags, and creates the
+**GitHub Release** with the packed `.tgz` attached. **This fork does not publish
+to npm** — it ships via Git + GitHub Releases (`@semantic-release/npm` runs with
+`npmPublish: false`, only to bump the version and pack the tarball). **Do not
+hand-edit `version`** — semantic-release owns it; `package.json` + `CHANGELOG.md`
+are committed back (with `[skip ci]`). A `commit-msg` hook runs commitlint
+locally so malformed messages can't silently skip a release.
+
+Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git ref
+(`github:apachler/gree-hvac-client#vX.Y.Z`) — see the README.
 
 ## Gotchas
 
-- The published npm package name is `gree-hvac-client`; this repo is the
-  `apachler/gree-hvac-client` fork (the `repository`/`bugs`/`homepage` fields
-  point here).
+- The npm name `gree-hvac-client` belongs to the upstream project (inwaar); this
+  fork (`apachler/gree-hvac-client`) is **not** published to npm and is consumed
+  via Git/GitHub Releases. The `repository`/`bugs`/`homepage` fields point here.
 - `package-lock.json` and `README.md` are marked `linguist-generated` in
   `.gitattributes` — `README.md` is regenerated, don't hand-edit it.
 - Workflow triggers: CI runs on every push/PR; releases only on push to master.

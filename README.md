@@ -1,11 +1,11 @@
 # Gree HVAC client
 
-![NPM status](https://img.shields.io/npm/v/gree-hvac-client)
+![GitHub release](https://img.shields.io/github/v/release/apachler/gree-hvac-client?sort=semver)
 ![CI status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/ci.yml?label=ci)
 ![CodeQL status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/codeql.yml?label=codeql)
 ![Release status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/release.yml?label=release)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/apachler/gree-hvac-client/badge)](https://securityscorecards.dev/viewer/?uri=github.com/apachler/gree-hvac-client)
-![License](https://img.shields.io/npm/l/gree-hvac-client)
+![License](https://img.shields.io/github/license/apachler/gree-hvac-client)
 ![Code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)
 
 A client for communicating with Gree air conditioners.
@@ -16,11 +16,33 @@ A client for communicating with Gree air conditioners.
 
 ## Installation
 
-`yarn add gree-hvac-client`
+This fork is distributed via **Git + GitHub Releases** (not the npm registry,
+where the `gree-hvac-client` name belongs to the upstream project). Pin a release
+tag.
 
-or
+**Recommended — install the packed tarball** from the GitHub Release (a
+self-contained npm tarball; needs no git, no build step, ideal for Docker /
+air-gapped builds):
 
-`npm install --save gree-hvac-client`
+```shell
+npm install https://github.com/apachler/gree-hvac-client/releases/download/v3.0.0/gree-hvac-client-3.0.0.tgz
+```
+
+**Or install the Git ref** (npm clones the repo at the tag):
+
+```shell
+npm install github:apachler/gree-hvac-client#v3.0.0
+```
+
+Either way you can pin it in `package.json`:
+
+```json
+{
+  "dependencies": {
+    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v3.0.0/gree-hvac-client-3.0.0.tgz"
+  }
+}
+```
 
 
 ## Simple usage
