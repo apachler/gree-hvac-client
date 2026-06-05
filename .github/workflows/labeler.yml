@@ -1,0 +1,50 @@
+name: Auto-label PRs
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Maps Conventional Commit prefixes in the PR title to a label for triage and
+# filtering (feat/fix/docs/...). Release notes themselves come from
+# semantic-release (release-notes-generator), so this is purely for PR
+# organization. Labels are created on first use if they don't already exist.
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply label from PR title
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title || '';
+            const map = [
+              [/^feat(\(|!|:)/i,     'feat'],
+              [/^fix(\(|!|:)/i,      'fix'],
+              [/^docs(\(|!|:)/i,     'docs'],
+              [/^test(s?)(\(|!|:)/i, 'test'],
+              [/^chore(\(|!|:)/i,    'chore'],
+              [/^refactor(\(|!|:)/i, 'refactor'],
+              [/^perf(\(|!|:)/i,     'enhancement'],
+              [/^ci(\(|!|:)/i,       'ci'],
+              [/^build(\(|!|:)/i,    'build'],
+              [/^style(\(|!|:)/i,    'style'],
+            ];
+            const toAdd = [];
+            for (const [re, label] of map) {
+              if (re.test(title)) { toAdd.push(label); break; }
+            }
+            if (!toAdd.length) {
+              core.info(`No conventional-commit prefix matched in: "${title}"`);
+              return;
+            }
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              labels: toAdd,
+            });
+            core.info(`Applied labels: ${toAdd.join(', ')}`);
