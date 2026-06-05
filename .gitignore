@@ -57,3 +57,9 @@ typings/
 # dotenv environment variables file
 .env
 
+# JetBrains IDE project files
+.idea/
+
+# Stray temp files (e.g. generated-doc scratch files)
+*.tmp.*
+
