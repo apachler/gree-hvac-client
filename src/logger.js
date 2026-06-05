@@ -58,6 +58,7 @@ const LOG_LEVELS = [
  *
  * @param {object} logger A winston logger
  * @returns {object} The same logger, with guarded log methods
+ * @private
  */
 const guardLogger = logger => {
     for (const level of LOG_LEVELS) {
