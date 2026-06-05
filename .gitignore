@@ -66,3 +66,6 @@ typings/
 # semantic-release packs the release tarball here before attaching it to the GitHub Release
 pack/
 
+# Local-only engineering backlog (not published, not tracked)
+HAPPY-CODING.md
+
