@@ -1,3 +1,10 @@
+## [3.0.3](https://github.com/apachler/gree-hvac-client/compare/v3.0.2...v3.0.3) (2026-06-06)
+
+
+### Bug Fixes
+
+* **transformer:** guard TemSen +40 decode for non-offset firmwares ([b64d8cc](https://github.com/apachler/gree-hvac-client/commit/b64d8ccc8ad30b47785c83d37b1f0c6dde286021)), closes [inwaar/node-red-contrib-gree-hvac#10](https://github.com/inwaar/node-red-contrib-gree-hvac/issues/10)
+
 ## [3.0.2](https://github.com/apachler/gree-hvac-client/compare/v3.0.1...v3.0.2) (2026-06-06)
 
 
