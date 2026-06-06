@@ -5,7 +5,6 @@ const { Client } = require('../src/client');
 const {
     ClientSocketSendError,
     ClientNotConnectedError,
-    ClientConnectTimeoutError,
     ClientCancelConnectError,
 } = require('../src/errors');
 
@@ -43,19 +42,8 @@ describe('Client', () => {
             await SUT.disconnect();
         });
 
-        it('should reconnect if not connected', async () => {
-            const SUT = new Client({
-                host: 'localhost',
-                connectTimeout: 1,
-            });
-
-            await assert.rejects(onceError(SUT), ClientConnectTimeoutError);
-            await assert.rejects(onceError(SUT), ClientConnectTimeoutError);
-            await assert.rejects(onceError(SUT), ClientConnectTimeoutError);
-
-            await SUT.disconnect();
-            await assert.rejects(onceError(SUT), ClientCancelConnectError);
-        });
+        // "should reconnect if not connected" moved to test/reconnect.spec.js
+        // (deterministic, dgram-mocked + fake timers — was timing-flaky here).
     });
 
     describe('setProperty', () => {
