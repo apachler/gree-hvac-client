@@ -582,7 +582,7 @@ See [`.env.example`](.env.example) for the full list and defaults.
 ```bash
 git clone https://github.com/apachler/gree-hvac-client.git
 cd gree-hvac-client
-npm install        # also installs the git hooks (lint + commit-msg)
+npm install        # also installs the git hook (pre-push lint)
 npm test           # Jest unit tests
 npm run lint       # ESLint + Prettier
 npm run docs       # regenerate README.md from README.hbs

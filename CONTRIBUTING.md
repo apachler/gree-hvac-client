@@ -71,8 +71,8 @@ Commits and PR titles **must** follow
 [Conventional Commits](https://www.conventionalcommits.org/), e.g.
 `feat: add quiet mode toggle` or `fix(encryption): handle GCM bind timeout`.
 This is not cosmetic: **`semantic-release` derives the next version number and
-the changelog directly from your commit messages** on `master`. A `commit-msg`
-hook (commitlint) validates messages locally. Recognised prefixes:
+the changelog directly from your commit messages** on `master`. Recognised
+prefixes:
 
 `feat:` `fix:` `docs:` `test:` `chore:` `refactor:` `perf:` `ci:` `build:` `style:`
 

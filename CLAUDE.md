@@ -85,8 +85,7 @@ next version, updates `CHANGELOG.md` + `package.json` and commits them back with
 do), creates the **git tag** and the **GitHub Release**, and attaches the packed
 `.tgz`. **This fork does not publish to npm** — `@semantic-release/npm` runs with
 `npmPublish: false` only to bump the version and pack the tarball. **Do not
-hand-edit `version` or `CHANGELOG.md`** — semantic-release owns them. A
-`commit-msg` hook runs commitlint locally.
+hand-edit `version` or `CHANGELOG.md`** — semantic-release owns them.
 
 Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git ref
 (`github:apachler/gree-hvac-client#vX.Y.Z`) — see the README.
