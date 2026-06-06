@@ -36,19 +36,46 @@ const PROPERTY_VENDOR_COMPANIONS = {
     sleep: ['SlpMod'],
 };
 
+// Most firmwares report the internal sensor `TemSen` offset by +40 (the field
+// is an unsigned type, so the offset avoids negative values): real = TemSen − 40.
+const TEMSEN_OFFSET = 40;
+
+// …but some firmwares report `TemSen` already in real °C with no offset
+// (upstream inwaar/node-red-contrib-gree-hvac#10). There, the blind subtraction
+// produces an impossible reading — a real room of 31 °C arrives as `31` and
+// `31 − 40 = −9 °C` is the exact bogus value users reported. An internal AC
+// sensor never legitimately reads below freezing in service, so if subtracting
+// the offset would drop below this floor we conclude the firmware did NOT apply
+// the offset and pass the raw value through unchanged. A genuinely sub-zero
+// reading on an offset firmware (rare for an indoor sensor) is the only case
+// this mis-handles; the configurable-offset escape hatch is the fallback there.
+const MIN_PLAUSIBLE_DECODED_C = 0;
+
+/**
+ * Decode the raw `TemSen` vendor value to a real °C reading, accounting for the
+ * +40 quirk and its firmware-dependent variants. Exported so the simulator and
+ * tests can assert the exact rule.
+ *
+ * @param {number} value Raw `TemSen` as reported by the device
+ * @returns {number} Real °C, or `0` when the sensor is unsupported/unavailable
+ * @private
+ */
+const decodeCurrentTemperature = value => {
+    // `0` means the unit has no internal sensor / the feature is unsupported —
+    // keep it as "unavailable", never decode it to −40.
+    if (value === 0) {
+        return 0;
+    }
+    const decoded = value - TEMSEN_OFFSET;
+    if (decoded < MIN_PLAUSIBLE_DECODED_C) {
+        return value;
+    }
+    return decoded;
+};
+
 const PROPERTY_VALUE_TRANSFORMERS = {
     currentTemperature: {
-        fromVendor: function (value) {
-            // Temperature from the AC should be transformed by subtract 40 to get real temperature
-            // AC returns temperature+40. I believe it's because it has unsigned data type
-            // When TemSen=0 it likely means the devices does not support the feature
-            // @see https://github.com/ddenisyuk/homebridge-gree-heatercooler/blob/3979fc6dad9d1935c59c686eb1764a062246ee7c/index.js#L224-L226
-            if (value !== 0) {
-                value -= 40;
-            }
-
-            return value;
-        },
+        fromVendor: decodeCurrentTemperature,
         toVendor: function () {
             throw new Error(`Cannot set read-only property currentTemperature`);
         },
@@ -175,4 +202,5 @@ class PropertyTransformer {
 
 module.exports = {
     PropertyTransformer,
+    decodeCurrentTemperature,
 };

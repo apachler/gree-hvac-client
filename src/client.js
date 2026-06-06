@@ -668,6 +668,19 @@ class Client extends EventEmitter {
 
         const updatedProperties = diff(oldProperties, newProperties);
 
+        // Surface the raw vs decoded internal sensor at debug level. The +40
+        // quirk has firmware-dependent variants (inwaar/node-red-contrib-gree-hvac#10):
+        // when a unit reports a wrong `currentTemperature`, the raw `TemSen` is
+        // exactly what's needed to diagnose it in the field.
+        if ('TemSen' in newProperties) {
+            this._logger.debug('Internal sensor (TemSen)', {
+                raw: newProperties.TemSen,
+                decoded: this._transformer.fromVendor({
+                    TemSen: newProperties.TemSen,
+                }).currentTemperature,
+            });
+        }
+
         if (Object.keys(updatedProperties).length > 0) {
             this.emit(
                 'update',
