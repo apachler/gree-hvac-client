@@ -18,6 +18,22 @@ describe('PropertyTransformer', function () {
             });
         });
 
+        it('should skip unknown vendor codes instead of throwing', function () {
+            const SUT = new PropertyTransformer();
+            // SlpMod is written as a companion of SwhSlp but has no friendly
+            // name; a device echoing it back must not crash fromVendor.
+            const result = SUT.fromVendor({
+                Pow: 1,
+                SwhSlp: 1,
+                SlpMod: 1,
+            });
+
+            assert.deepEqual(result, {
+                power: 'on',
+                sleep: 'on',
+            });
+        });
+
         it('should not subtract 40 from vendor value in case of zero', function () {
             const SUT = new PropertyTransformer();
             const result = SUT.fromVendor({

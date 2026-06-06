@@ -95,6 +95,12 @@ class PropertyTransformer {
         const ret = {};
         for (const [property, value] of Object.entries(properties)) {
             const reversedProperty = this._reversedProperties[property];
+            // Skip vendor codes this client doesn't model — e.g. the `SlpMod`
+            // companion echoed back in a set-confirmation, or extra fields a
+            // device returns. Mapping them would throw on the unknown key.
+            if (reversedProperty === undefined) {
+                continue;
+            }
             ret[reversedProperty] = this._valueFromVendor(
                 reversedProperty,
                 value
