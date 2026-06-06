@@ -42,6 +42,19 @@ describe('PropertyTransformer', function () {
                 SetTem: 25,
             });
         });
+        it('should write paired SwhSlp + SlpMod when toggling sleep', function () {
+            const SUT = new PropertyTransformer();
+
+            assert.deepEqual(SUT.toVendor({ sleep: 'on' }), {
+                SwhSlp: 1,
+                SlpMod: 1,
+            });
+            assert.deepEqual(SUT.toVendor({ sleep: 'off' }), {
+                SwhSlp: 0,
+                SlpMod: 0,
+            });
+        });
+
         it('should not allow to change read-only property', function () {
             const SUT = new PropertyTransformer();
             assert.throws(

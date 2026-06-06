@@ -21,6 +21,21 @@ const PROPERTY_VENDOR_CODES = {
     safetyHeating: 'StHt',
 };
 
+/**
+ * Some friendly properties map to more than one vendor code that must be
+ * written together. `sleep` is the known case: many units gate the sleep
+ * function behind a *pair* of fields — `SwhSlp` (the switch) and `SlpMod`
+ * (the mode) — that have to move in lockstep. Writing only `SwhSlp` leaves
+ * `SlpMod` untouched, so `{sleep: 'off'}` is silently ignored by the unit
+ * (upstream inwaar/node-red-contrib-gree-hvac#7). When a primary property
+ * here is set, every companion code is written with the same vendor value.
+ *
+ * @private
+ */
+const PROPERTY_VENDOR_COMPANIONS = {
+    sleep: ['SlpMod'],
+};
+
 const PROPERTY_VALUE_TRANSFORMERS = {
     currentTemperature: {
         fromVendor: function (value) {
@@ -97,10 +112,14 @@ class PropertyTransformer {
     toVendor(properties) {
         const ret = {};
         for (const [property, value] of Object.entries(properties)) {
-            ret[this._properties[property]] = this._valueToVendor(
-                property,
-                value
-            );
+            const vendorValue = this._valueToVendor(property, value);
+            ret[this._properties[property]] = vendorValue;
+            const companions = PROPERTY_VENDOR_COMPANIONS[property];
+            if (companions) {
+                for (const companion of companions) {
+                    ret[companion] = vendorValue;
+                }
+            }
         }
         return ret;
     }

@@ -302,6 +302,9 @@ class Client extends EventEmitter {
         if (this._statusTimeoutRef) {
             clearTimeout(this._statusTimeoutRef);
         }
+        if (this._bindTimeoutRef) {
+            clearTimeout(this._bindTimeoutRef);
+        }
     }
 
     /**
@@ -640,9 +643,25 @@ class Client extends EventEmitter {
 
         clearTimeout(this._statusTimeoutRef);
 
+        // Guard against malformed packets: some firmwares occasionally return a
+        // status without the expected parallel `cols`/`dat` arrays. Iterating
+        // them blindly used to throw and (when unhandled) crash the host
+        // process — see inwaar/node-red-contrib-gree-hvac#11/#12. Skip the
+        // packet with a warning instead.
+        if (!Array.isArray(pack.cols) || !Array.isArray(pack.dat)) {
+            this._logger.warn('Malformed status response, ignoring', {
+                cols: pack.cols,
+                dat: pack.dat,
+            });
+            return;
+        }
+
         const oldProperties = clone(this._properties);
         const newProperties = {};
         pack.cols.forEach((col, i) => {
+            if (i >= pack.dat.length) {
+                return;
+            }
             newProperties[col] = pack.dat[i];
             this._properties[col] = pack.dat[i];
         });
@@ -669,10 +688,28 @@ class Client extends EventEmitter {
     _handleUpdateConfirmResponse(pack) {
         this._logger.info('Update response');
 
+        // Guard against malformed packets. The set-confirmation carries the
+        // updated values in either `val` or `p`, parallel to `opt`. A device
+        // that returns `opt` without a matching value array used to throw here
+        // (`Cannot read properties of undefined (reading '0')`) and, being
+        // unhandled, crash the whole Node-RED process — the exact failure in
+        // inwaar/node-red-contrib-gree-hvac#11/#12. Skip with a warning.
+        const values = 'val' in pack ? pack.val : pack.p;
+        if (!Array.isArray(pack.opt) || !Array.isArray(values)) {
+            this._logger.warn('Malformed update-confirm response, ignoring', {
+                opt: pack.opt,
+                val: pack.val,
+                p: pack.p,
+            });
+            return;
+        }
+
         const updatedProperties = {};
         pack.opt.forEach((opt, i) => {
-            const value = 'val' in pack ? pack.val : pack.p;
-            this._properties[opt] = updatedProperties[opt] = value[i];
+            if (i >= values.length) {
+                return;
+            }
+            this._properties[opt] = updatedProperties[opt] = values[i];
         });
 
         this.emit(

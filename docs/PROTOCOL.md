@@ -92,7 +92,7 @@ Friendly name ⇄ vendor code mapping and value enums, as exposed by
 | `air` | `Air` | off→0, inside→1, outside→2, mode3→3 | Fresh-air valve (see below). |
 | `blow` | `Blo` | off→0, on→1 | "X-Fan" post-run fan dry (see below). |
 | `health` | `Health` | off→0, on→1 | "Cold plasma" anion generator (see below). |
-| `sleep` | `SwhSlp` | off→0, on→1 | Sleep mode (see below). |
+| `sleep` | `SwhSlp` (+ `SlpMod`) | off→0, on→1 | Sleep mode — written as a pair (see below). |
 | `lights` | `Lig` | off→0, on→1 | Unit display / indicator LEDs. |
 | `swingHor` | `SwingLfRig` | default→0, full→1, fixedLeft→2, fixedMidLeft→3, fixedMid→4, fixedMidRight→5, fixedRight→6, fullAlt→7 | Horizontal louver position/swing (not on all units). |
 | `swingVert` | `SwUpDn` | default→0, full→1, fixedTop→2, fixedMidTop→3, fixedMid→4, fixedMidBottom→5, fixedBottom→6, swingBottom→7, swingMidBottom→8, swingMid→9, swingMidTop→10, swingTop→11 | Vertical louver position/swing. |
@@ -116,6 +116,12 @@ ones it doesn't have.
   dust and neutralize bacteria. Only on equipped units.
 - **sleep** — *Sleep / night mode.* Gradually drifts the setpoint over time
   (warmer in Cool, cooler in Heat/Dry) for overnight comfort and efficiency.
+  Many units gate this behind a **pair** of vendor fields — `SwhSlp` (the
+  switch) and `SlpMod` (the mode) — that must move together: `(0,0)` to
+  disable, `(1,1)` to enable. Writing only `SwhSlp` leaves `SlpMod` set, so the
+  unit silently keeps sleeping and `{sleep:'off'}` appears to do nothing. The
+  client therefore writes both codes from the single friendly `sleep` property
+  and reads `SwhSlp` back as the canonical value.
 - **lights** — Turns the unit's display and indicator LEDs on/off (handy in a
   bedroom). Does not affect operation.
 - **quiet** — *Quiet mode.* Slows the fan to its quietest speeds
