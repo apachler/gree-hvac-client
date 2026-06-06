@@ -1,3 +1,10 @@
+## [3.0.2](https://github.com/apachler/gree-hvac-client/compare/v3.0.1...v3.0.2) (2026-06-06)
+
+
+### Bug Fixes
+
+* **transformer:** skip unknown vendor codes in fromVendor ([f6c7655](https://github.com/apachler/gree-hvac-client/commit/f6c7655f3f7d825451141a868f2d532ea1516261))
+
 ## [3.0.1](https://github.com/apachler/gree-hvac-client/compare/v3.0.0...v3.0.1) (2026-06-06)
 
 
