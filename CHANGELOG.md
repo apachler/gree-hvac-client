@@ -1,3 +1,12 @@
+## [3.0.1](https://github.com/apachler/gree-hvac-client/compare/v3.0.0...v3.0.1) (2026-06-06)
+
+
+### Bug Fixes
+
+* clear pending bind timeout on dispose ([32c1d9d](https://github.com/apachler/gree-hvac-client/commit/32c1d9da897720e7aa1971a02e7904da0eca7984)), closes [inwaar/gree-hvac-client#29](https://github.com/inwaar/gree-hvac-client/issues/29)
+* **client:** harden response parsing against malformed packets ([390f90f](https://github.com/apachler/gree-hvac-client/commit/390f90f4dd6a236f560c2695b848662f6b6f530b)), closes [inwaar/node-red-contrib-gree-hvac#11](https://github.com/inwaar/node-red-contrib-gree-hvac/issues/11) [inwaar/node-red-contrib-gree-hvac#12](https://github.com/inwaar/node-red-contrib-gree-hvac/issues/12)
+* **transformer:** write paired SwhSlp + SlpMod for sleep ([6ebdb47](https://github.com/apachler/gree-hvac-client/commit/6ebdb470d0171a9b50f5d6ebe15677625b40ba01)), closes [inwaar/node-red-contrib-gree-hvac#7](https://github.com/inwaar/node-red-contrib-gree-hvac/issues/7)
+
 # [3.0.0](https://github.com/apachler/gree-hvac-client/compare/v2.2.0...v3.0.0) (2026-06-05)
 
 
