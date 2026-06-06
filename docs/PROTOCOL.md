@@ -149,10 +149,30 @@ real °C  = TemSen − 40        (when TemSen ≠ 0)
 TemSen   = real °C + 40       (to encode)
 ```
 
-This client applies the offset in
-[`src/property-transformer.js`](../src/property-transformer.js): `TemSen` is
-decoded to the real temperature on the way out, and `currentTemperature` is
-read-only (attempting to set it throws).
+### Firmware variants (the −9 °C bug)
+
+Not every firmware applies the offset. Some report `TemSen` **already in real
+°C**, so the blind `TemSen − 40` yields an impossible reading — a 31 °C room
+arrives as `31` and decodes to `31 − 40 = −9 °C` (the exact value reported in
+upstream `inwaar/node-red-contrib-gree-hvac#10`). This client guards against it:
+an internal sensor never legitimately reads below **0 °C** in service, so when
+subtracting the offset would drop below that floor, the raw value is treated as
+already-real and passed through unchanged. `0` stays "unavailable".
+
+```text
+decoded = TemSen − 40
+real °C = decoded            (when decoded ≥ 0)
+real °C = TemSen             (when decoded < 0 — firmware did not offset)
+real °C = 0 (unavailable)    (when TemSen = 0)
+```
+
+To diagnose a unit's behaviour, run at `logLevel: "debug"`: each status response
+logs the **raw `TemSen`** alongside the decoded value.
+
+This client applies the rule in
+[`src/property-transformer.js`](../src/property-transformer.js)
+(`decodeCurrentTemperature`): `TemSen` is decoded to the real temperature on the
+way out, and `currentTemperature` is read-only (attempting to set it throws).
 
 ---
 

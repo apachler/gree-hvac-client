@@ -1,5 +1,8 @@
 const assert = require('assert');
-const { PropertyTransformer } = require('../src/property-transformer');
+const {
+    PropertyTransformer,
+    decodeCurrentTemperature,
+} = require('../src/property-transformer');
 
 describe('PropertyTransformer', function () {
     describe('#fromVendor()', function () {
@@ -43,6 +46,35 @@ describe('PropertyTransformer', function () {
             assert.deepEqual(result, {
                 currentTemperature: 0,
             });
+        });
+
+        // Regression for inwaar/node-red-contrib-gree-hvac#10: some firmwares
+        // report TemSen already in real °C (no +40 offset). Blindly subtracting
+        // 40 then yields an impossible reading (31 − 40 = −9 °C, the exact value
+        // users reported). The sanity guard treats such already-real values as-is.
+        it('should pass TemSen through unchanged when -40 would be implausibly cold (#10)', function () {
+            const SUT = new PropertyTransformer();
+            assert.deepEqual(SUT.fromVendor({ TemSen: 31 }), {
+                currentTemperature: 31,
+            });
+        });
+    });
+
+    describe('decodeCurrentTemperature()', function () {
+        it('keeps 0 as the unavailable sentinel', function () {
+            assert.equal(decodeCurrentTemperature(0), 0);
+        });
+
+        it('subtracts the +40 offset for normal offset firmwares', function () {
+            assert.equal(decodeCurrentTemperature(65), 25); // sim default
+            assert.equal(decodeCurrentTemperature(67), 27);
+            assert.equal(decodeCurrentTemperature(40), 0); // boundary: decoded floor
+        });
+
+        it('passes the raw value through when decoding drops below the floor', function () {
+            assert.equal(decodeCurrentTemperature(31), 31); // the reported -9 case
+            assert.equal(decodeCurrentTemperature(39), 39); // decoded -1 < 0 -> raw
+            assert.equal(decodeCurrentTemperature(20), 20);
         });
     });
     describe('#toVendor()', function () {
