@@ -11,6 +11,11 @@ const { PROPERTY_VALUE } = require('./property-value');
 const { CLIENT_OPTIONS, createOptions } = require('./client-options');
 const { PropertyTransformer } = require('./property-transformer');
 const {
+    // Imported only for the {ClientError} type in the Client#error JSDoc below.
+    // ESLint 9's eslint-plugin-jsdoc no longer marks JSDoc-referenced imports
+    // as used, and jsdoc-to-markdown can't parse an inline import('...') type,
+    // so this narrow disable keeps both the generated docs and lint happy.
+    // eslint-disable-next-line no-unused-vars
     ClientError,
     ClientMessageParseError,
     ClientMessageUnpackError,
