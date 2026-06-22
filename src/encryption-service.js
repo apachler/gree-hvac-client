@@ -61,7 +61,7 @@ class EncryptionService {
      * @returns {object}
      */
     decrypt(input) {
-        const decrypted = this._activeCipher.decrypt(input);
+        const decrypted = this._decryptWithFallback(input);
         const payload = decrypted.payload;
 
         if (payload.t === 'bindok') {
@@ -71,6 +71,49 @@ class EncryptionService {
         this._logger.debug('Decrypt', { input, output: decrypted });
 
         return payload;
+    }
+
+    /**
+     * Decrypt using the active cipher, falling back to the other cipher.
+     *
+     * Newer devices (firmware V2.x) answer the scan/handshake with a GCM
+     * encrypted message before any bind has happened, so the cipher cannot be
+     * inferred from the bind attempt counter alone. Auto-detect it instead: try
+     * the active cipher first, then the other one, and make whichever succeeds
+     * the active cipher (so subsequent encryptions use it too). GCM is
+     * authenticated and ECB is validated by JSON parsing, so the wrong cipher
+     * reliably throws rather than returning garbage.
+     *
+     * @param {object} input Response object
+     * @param {string} input.pack Encrypted JSON string
+     * @returns {EncryptedMessage}
+     * @private
+     */
+    _decryptWithFallback(input) {
+        const ciphers =
+            this._activeCipher === this._gcmCipher
+                ? [this._gcmCipher, this._aesCipher]
+                : [this._aesCipher, this._gcmCipher];
+
+        let lastError;
+        for (const cipher of ciphers) {
+            try {
+                const decrypted = cipher.decrypt(input);
+
+                if (this._activeCipher !== cipher) {
+                    this._activeCipher = cipher;
+                    this._logger.debug('Switched active cipher', {
+                        cipher: decrypted.cipher,
+                    });
+                }
+
+                return decrypted;
+            } catch (error) {
+                lastError = error;
+            }
+        }
+
+        throw lastError;
     }
 
     /**
