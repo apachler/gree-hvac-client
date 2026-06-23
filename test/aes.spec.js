@@ -447,6 +447,32 @@ describe('AES encryption', () => {
 
             feedClient(message7.payload);
         });
+
+        it('should get device status with GCM when the scan response is GCM', async () => {
+            // Firmware V2.x devices encrypt the scan/DEV response with GCM
+            // already, before any bind has happened. The client must auto-detect
+            // GCM from that first response instead of relying on the bind-attempt
+            // counter, otherwise it fails with "wrong final block length" and
+            // never binds.
+
+            // 1) client sends SCAN
+            expect(clientSocketSend.mock.calls[0][0]).toEqual({ t: 'scan' });
+
+            // 2) device answers SCAN with a GCM-encrypted DEV
+            feedClient(device.scan(gcm).payload);
+            await jest.advanceTimersByTimeAsync(1);
+
+            // 3) client binds with GCM on the FIRST attempt (cipher auto-detected
+            //    from the scan response, not after the 500ms second attempt)
+            expect(clientEncrypt.mock.results[0].value.cipher).toBe('gcm');
+
+            // 4) device confirms the bind with GCM
+            feedClient(device.bind(gcm).payload);
+
+            // 5) status request is GCM and the device answers with GCM
+            expect(clientEncrypt.mock.results[1].value.cipher).toBe('gcm');
+            feedClient(device.status(gcm).payload);
+        });
     });
 
     it('should reset encryption cipher state on reconnect', async () => {
