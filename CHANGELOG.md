@@ -1,3 +1,10 @@
+## [3.0.4](https://github.com/apachler/gree-hvac-client/compare/v3.0.3...v3.0.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* **encryption:** auto-detect GCM from the scan response ([0183626](https://github.com/apachler/gree-hvac-client/commit/0183626fee181a667e12618f366dca93ffec83bf))
+
 ## [3.0.3](https://github.com/apachler/gree-hvac-client/compare/v3.0.2...v3.0.3) (2026-06-06)
 
 
