@@ -306,6 +306,7 @@ class Client extends EventEmitter {
         }
         if (this._statusTimeoutRef) {
             clearTimeout(this._statusTimeoutRef);
+            this._statusTimeoutRef = null;
         }
         if (this._bindTimeoutRef) {
             clearTimeout(this._bindTimeoutRef);
@@ -502,7 +503,19 @@ class Client extends EventEmitter {
             t: 'status',
         });
 
+        // Keep at most one status timeout armed. Re-arming on every poll would
+        // orphan the previous timer when pollingTimeout >= pollingInterval
+        // (spurious no_response despite valid replies, issue #7), while
+        // clearing + re-arming would keep pushing the deadline so a dead
+        // device never triggers no_response. Instead the timer measures the
+        // time since the oldest unanswered request.
+        if (this._statusTimeoutRef) {
+            return;
+        }
+
         this._statusTimeoutRef = setTimeout(() => {
+            this._statusTimeoutRef = null;
+
             this._logger.warn('Status request timeout', {
                 timeout: this._options.pollingTimeout,
             });
@@ -647,6 +660,7 @@ class Client extends EventEmitter {
         this._logger.info('Status response');
 
         clearTimeout(this._statusTimeoutRef);
+        this._statusTimeoutRef = null;
 
         // Guard against malformed packets: some firmwares occasionally return a
         // status without the expected parallel `cols`/`dat` arrays. Iterating
