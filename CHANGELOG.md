@@ -1,3 +1,10 @@
+## [3.0.5](https://github.com/apachler/gree-hvac-client/compare/v3.0.4...v3.0.5) (2026-08-07)
+
+
+### Bug Fixes
+
+* **client:** keep a single status timeout to avoid spurious no_response ([21496a7](https://github.com/apachler/gree-hvac-client/commit/21496a74b7b101ae90e2ffb74f290c5fb8eb48e0)), closes [#7](https://github.com/apachler/gree-hvac-client/issues/7)
+
 ## [3.0.4](https://github.com/apachler/gree-hvac-client/compare/v3.0.3...v3.0.4) (2026-06-23)
 
 
