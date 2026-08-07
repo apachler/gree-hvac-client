@@ -22,7 +22,7 @@
   "license": "GPL-3.0",
   "dependencies": {
     "clone": "^2.1.2",
-    "object-diff": "^0.0.4",
+    "object-diff": "^2.0.0",
     "winston": "^3.17.0"
   },
   "engines": {
