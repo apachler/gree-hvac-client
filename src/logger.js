@@ -65,21 +65,29 @@ const guardLogger = logger => {
         if (typeof logger[level] !== 'function') {
             continue;
         }
-        const original = logger[level].bind(logger);
-        logger[level] = (...args) => {
+        const original = logger[level];
+        // Must stay a regular function and dispatch through the dynamic
+        // `this`: winston children are created via Object.create(parent) and
+        // override only `write` to inject their metadata (service/sid). A
+        // method hard-bound to the parent would bypass the child's `write`,
+        // lose that metadata, and make the console format throw on every
+        // line — which the catch below would then silently swallow.
+        logger[level] = function (...args) {
             try {
-                return original(...args);
+                return original.apply(this, args);
             } catch {
                 // A logger that throws while logging is unrecoverable; drop the
                 // line rather than propagate the failure into client control flow.
-                return logger;
+                return this;
             }
         };
     }
 
     if (typeof logger.child === 'function') {
-        const child = logger.child.bind(logger);
-        logger.child = (...args) => guardLogger(child(...args));
+        const child = logger.child;
+        logger.child = function (...args) {
+            return guardLogger(child.apply(this, args));
+        };
     }
 
     return logger;
