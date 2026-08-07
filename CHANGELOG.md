@@ -1,3 +1,10 @@
+## [3.0.6](https://github.com/apachler/gree-hvac-client/compare/v3.0.5...v3.0.6) (2026-08-07)
+
+
+### Bug Fixes
+
+* **logger:** preserve dynamic this in guard so child loggers keep metadata ([54ad8f6](https://github.com/apachler/gree-hvac-client/commit/54ad8f621e1c9ff73a67bc55dd294d0230f2391c)), closes [#28](https://github.com/apachler/gree-hvac-client/issues/28)
+
 ## [3.0.5](https://github.com/apachler/gree-hvac-client/compare/v3.0.4...v3.0.5) (2026-08-07)
 
 
