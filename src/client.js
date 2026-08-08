@@ -256,8 +256,7 @@ class Client extends EventEmitter {
                 return;
             }
 
-            await this._scheduleReconnect();
-            this.emit('error', new ClientConnectTimeoutError());
+            this._scheduleReconnect();
         } catch (err) {
             // Only retry while a socket is still around: disconnect() may have
             // released it while this attempt was in flight.
@@ -277,34 +276,43 @@ class Client extends EventEmitter {
     }
 
     /**
-     * Maintain auto-reconnect
+     * Maintain auto-reconnect: arm (or re-arm) the connect-timeout timer that
+     * reports the timed-out attempt and starts the next one.
+     *
+     * Deliberately fire-and-forget: a promise resolved from the timer callback
+     * would never settle once the timer is cleared (superseded or disposed),
+     * freezing whatever chain awaits it.
      *
      * @private
      */
     _scheduleReconnect() {
-        return new Promise(resolve => {
-            // Overwriting the reference without clearing it strands the timer
-            // it points at: _dispose() and disconnect() can only clear what is
-            // still referenced here, so a stranded one keeps firing for the
-            // lifetime of the process.
-            if (this._socketTimeoutRef) {
-                clearTimeout(this._socketTimeoutRef);
+        // Overwriting the reference without clearing it strands the timer
+        // it points at: _dispose() and disconnect() can only clear what is
+        // still referenced here, so a stranded one keeps firing for the
+        // lifetime of the process.
+        if (this._socketTimeoutRef) {
+            clearTimeout(this._socketTimeoutRef);
+        }
+
+        this._socketTimeoutRef = setTimeout(() => {
+            this._socketTimeoutRef = null;
+
+            if (!this._socket) {
+                this._logger.info('Skip reconnect, client is disconnected');
+                return;
             }
 
-            this._socketTimeoutRef = setTimeout(() => {
-                this._socketTimeoutRef = null;
-                this._logger.warn('Connect timeout, reconnect', {
-                    timeout: this._options.connectTimeout,
-                });
-                this._reconnectAttempt++;
+            this._logger.warn('Connect timeout, reconnect', {
+                timeout: this._options.connectTimeout,
+            });
+            this.emit('error', new ClientConnectTimeoutError());
+            this._reconnectAttempt++;
 
-                this._initialize().catch(error => {
-                    this.emit('error', error);
-                    this._logger.error('Initialize error', error);
-                });
-                resolve();
-            }, this._options.connectTimeout);
-        });
+            this._initialize().catch(error => {
+                this.emit('error', error);
+                this._logger.error('Initialize error', error);
+            });
+        }, this._options.connectTimeout);
     }
 
     /**

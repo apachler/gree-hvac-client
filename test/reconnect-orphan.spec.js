@@ -125,6 +125,23 @@ describe('Reconnect timer lifecycle', () => {
         expect(jest.getTimerCount()).toBe(0);
     });
 
+    it('should settle the initialize promise even when its reconnect is superseded', async () => {
+        SUT.connect().catch(() => {});
+
+        // _initialize used to stay parked on a promise that only the armed
+        // reconnect timer could resolve — clearing that timer froze the chain
+        // (and whoever awaited it) forever
+        const settled = jest.fn();
+        SUT._initialize().then(settled, settled);
+        await jest.advanceTimersByTimeAsync(0);
+
+        // the armed reconnect is cleared without ever firing
+        SUT._dispose();
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(settled).toHaveBeenCalled();
+    });
+
     // The full reconnect-then-disconnect flow lives in test/reconnect.spec.js
     // ("should keep timing out and reconnecting while unreachable, then stop
     // on disconnect"), which also asserts no timer survives disconnect().
