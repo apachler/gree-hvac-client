@@ -26,6 +26,7 @@ describe('Reconnect timer lifecycle', () => {
     const CONNECT_TIMEOUT = 1000;
 
     let SUT;
+    let errors;
 
     beforeEach(() => {
         dgram.createSocket.mockReturnValue(createSocketMock());
@@ -36,7 +37,8 @@ describe('Reconnect timer lifecycle', () => {
             autoConnect: false,
             connectTimeout: CONNECT_TIMEOUT,
         });
-        SUT.on('error', () => {});
+        errors = [];
+        SUT.on('error', e => errors.push(e));
     });
 
     afterEach(() => {
@@ -63,10 +65,6 @@ describe('Reconnect timer lifecycle', () => {
     });
 
     it('should not reconnect once the socket is gone', async () => {
-        const errors = [];
-        SUT.removeAllListeners('error');
-        SUT.on('error', e => errors.push(e));
-
         // A reconnect that survived disconnect(): socket already released.
         SUT._socket = null;
         SUT._scheduleReconnect();
@@ -79,10 +77,6 @@ describe('Reconnect timer lifecycle', () => {
     });
 
     it('should stop reconnecting after disconnect', async () => {
-        const errors = [];
-        SUT.removeAllListeners('error');
-        SUT.on('error', e => errors.push(e));
-
         SUT.connect().catch(() => {});
 
         await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT * 2);
