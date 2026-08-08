@@ -60,14 +60,17 @@ describe('Reconnect', () => {
         expect(errors.every(e => e instanceof ClientConnectTimeoutError)).toBe(
             true
         );
+        expect(SUT._socketTimeoutRef).not.toBeNull();
 
         // disconnect cancels the in-flight connect and clears the reconnect timer
         await SUT.disconnect();
+        expect(SUT._socketTimeoutRef).toBeNull();
         await jest.advanceTimersByTimeAsync(0); // drain the nextTick rejection
         expect(cancelError).toBeInstanceOf(ClientCancelConnectError);
 
-        // no further reconnect fires after disconnect
+        // no further reconnect fires after disconnect, and no timer survives it
         await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT * 3);
         expect(errors).toHaveLength(3);
+        expect(jest.getTimerCount()).toBe(0);
     });
 });

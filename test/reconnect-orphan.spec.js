@@ -77,20 +77,7 @@ describe('Reconnect timer lifecycle', () => {
         expect(jest.getTimerCount()).toBe(0);
     });
 
-    it('should stop reconnecting after disconnect', async () => {
-        SUT.connect().catch(() => {});
-
-        await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT * 2);
-        expect(errors).toHaveLength(2);
-        expect(SUT._socketTimeoutRef).not.toBeNull();
-
-        await SUT.disconnect();
-        expect(SUT._socketTimeoutRef).toBeNull();
-
-        await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT * 10);
-
-        expect(errors).toHaveLength(2);
-        expect(SUT._socketTimeoutRef).toBeNull();
-        expect(jest.getTimerCount()).toBe(0);
-    });
+    // The full reconnect-then-disconnect flow lives in test/reconnect.spec.js
+    // ("should keep timing out and reconnecting while unreachable, then stop
+    // on disconnect"), which also asserts no timer survives disconnect().
 });
