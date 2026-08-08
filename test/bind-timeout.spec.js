@@ -2,6 +2,7 @@ const dgram = require('dgram');
 
 const { Client } = require('../src/client');
 const { EncryptionService, EcbCipher } = require('../src/encryption-service');
+const { ClientSocketSendError } = require('../src/errors');
 const device = require('./support/device');
 const { createSocketMock } = require('./support/socket-mock');
 
@@ -23,6 +24,7 @@ describe('Bind timeout', () => {
     let feedClient;
     let clientEncrypt;
     let errors;
+    let socketMock;
 
     const bindAttempts = () =>
         clientEncrypt.mock.calls.filter(([msg]) => msg.t === 'bind').length;
@@ -30,9 +32,8 @@ describe('Bind timeout', () => {
     beforeEach(() => {
         ecb = new EcbCipher();
 
-        dgram.createSocket.mockReturnValue(
-            createSocketMock({ on: (event, cb) => (feedClient = cb) })
-        );
+        socketMock = createSocketMock({ on: (event, cb) => (feedClient = cb) });
+        dgram.createSocket.mockReturnValue(socketMock);
 
         SUT = new Client({ autoConnect: false });
 
@@ -67,5 +68,41 @@ describe('Bind timeout', () => {
         expect(bindAttempts()).toBe(1);
         // ...nor produced an error (e.g. ClientNotConnectedError on a null socket)
         expect(errors).toHaveLength(0);
+    });
+
+    it('should not strand the bind timer when the device retransmits its handshake', async () => {
+        // the device answers SCAN twice (broadcast scan / retransmission), so
+        // the handshake handler runs twice and re-arms the bind-retry timer
+        feedClient(device.scan(ecb).payload);
+        await jest.advanceTimersByTimeAsync(0);
+        feedClient(device.scan(ecb).payload);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(bindAttempts()).toBe(2);
+
+        // disconnect inside the retry window must reach every armed timer —
+        // re-arming used to strand the first one behind an overwritten ref
+        await SUT.disconnect();
+        await jest.advanceTimersByTimeAsync(1000);
+
+        expect(bindAttempts()).toBe(2);
+        expect(errors).toHaveLength(0);
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it('should surface a failing bind retry as an error event', async () => {
+        feedClient(device.scan(ecb).payload);
+        await jest.advanceTimersByTimeAsync(0);
+        expect(bindAttempts()).toBe(1);
+
+        // the retry's UDP send fails (e.g. transient network error); the
+        // rejection must become an 'error' event, not an unhandled rejection
+        socketMock.send = (buff, start, length, port, host, cb) =>
+            cb(new Error('send failed'));
+
+        await jest.advanceTimersByTimeAsync(500);
+
+        expect(bindAttempts()).toBe(2);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toBeInstanceOf(ClientSocketSendError);
     });
 });

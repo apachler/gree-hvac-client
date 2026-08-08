@@ -638,9 +638,23 @@ class Client extends EventEmitter {
         this._logger.info('Scan success');
 
         await this._sendBindRequest(1);
-        this._bindTimeoutRef = setTimeout(async () => {
+
+        // Re-arming without clearing would strand the previous timer (e.g.
+        // when a device retransmits its handshake) beyond the reach of
+        // _dispose(), leaving it to fire after disconnect().
+        if (this._bindTimeoutRef) {
+            clearTimeout(this._bindTimeoutRef);
+        }
+        this._bindTimeoutRef = setTimeout(() => {
+            this._bindTimeoutRef = null;
             this._logger.warn('Binding attempt timed out', { timeout });
-            await this._sendBindRequest(2);
+
+            // A rejection inside a timer callback has no caller to bubble to;
+            // unhandled it terminates the process instead of surfacing as an
+            // 'error' event.
+            this._sendBindRequest(2).catch(error =>
+                this.emit('error', error)
+            );
         }, timeout);
     }
 
