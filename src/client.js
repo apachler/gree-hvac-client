@@ -229,6 +229,15 @@ class Client extends EventEmitter {
     async _initialize() {
         this._dispose();
 
+        if (!this._socket) {
+            // The client was disconnected before this attempt ran. Going ahead
+            // would fail in _socketSend() with ClientNotConnectedError and then
+            // arm another attempt from the catch block below, so the client
+            // would keep retrying — and emitting — forever after disconnect().
+            this._logger.info('Skip initialize, client is disconnected');
+            return;
+        }
+
         try {
             this._encryptionService = new EncryptionService(this._logger);
 
@@ -240,7 +249,11 @@ class Client extends EventEmitter {
             await this._scheduleReconnect();
             this.emit('error', new ClientConnectTimeoutError());
         } catch (err) {
-            this._scheduleReconnect();
+            // Only retry while a socket is still around: disconnect() may have
+            // released it while this attempt was in flight.
+            if (this._socket) {
+                this._scheduleReconnect();
+            }
             throw err;
         }
     }
@@ -252,7 +265,16 @@ class Client extends EventEmitter {
      */
     _scheduleReconnect() {
         return new Promise(resolve => {
+            // Overwriting the reference without clearing it strands the timer
+            // it points at: _dispose() and disconnect() can only clear what is
+            // still referenced here, so a stranded one keeps firing for the
+            // lifetime of the process.
+            if (this._socketTimeoutRef) {
+                clearTimeout(this._socketTimeoutRef);
+            }
+
             this._socketTimeoutRef = setTimeout(() => {
+                this._socketTimeoutRef = null;
                 this._logger.warn('Connect timeout, reconnect', {
                     timeout: this._options.connectTimeout,
                 });
@@ -300,9 +322,11 @@ class Client extends EventEmitter {
     _dispose() {
         if (this._statusIntervalRef) {
             clearInterval(this._statusIntervalRef);
+            this._statusIntervalRef = null;
         }
         if (this._socketTimeoutRef) {
             clearTimeout(this._socketTimeoutRef);
+            this._socketTimeoutRef = null;
         }
         if (this._statusTimeoutRef) {
             clearTimeout(this._statusTimeoutRef);
@@ -310,6 +334,7 @@ class Client extends EventEmitter {
         }
         if (this._bindTimeoutRef) {
             clearTimeout(this._bindTimeoutRef);
+            this._bindTimeoutRef = null;
         }
     }
 
@@ -631,7 +656,9 @@ class Client extends EventEmitter {
         });
 
         clearTimeout(this._socketTimeoutRef);
+        this._socketTimeoutRef = null;
         clearTimeout(this._bindTimeoutRef);
+        this._bindTimeoutRef = null;
 
         await this._requestStatus();
         if (this._options.poll) {
