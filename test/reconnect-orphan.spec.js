@@ -27,9 +27,11 @@ describe('Reconnect timer lifecycle', () => {
 
     let SUT;
     let errors;
+    let socketMock;
 
     beforeEach(() => {
-        dgram.createSocket.mockReturnValue(createSocketMock());
+        socketMock = createSocketMock();
+        dgram.createSocket.mockReturnValue(socketMock);
 
         SUT = new Client({
             autoConnect: false,
@@ -75,6 +77,28 @@ describe('Reconnect timer lifecycle', () => {
         expect(errors).toHaveLength(0);
         expect(SUT._socketTimeoutRef).toBeNull();
         expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it('should not arm a reconnect when disconnect lands during the scan send', async () => {
+        // capture the scan send's callback so the send stays in flight
+        let sendCallback;
+        socketMock.send = (buff, start, length, port, host, cb) => {
+            sendCallback = cb;
+        };
+
+        SUT.connect().catch(() => {});
+
+        // disconnect() races the in-flight send, then the send completes
+        await SUT.disconnect();
+        sendCallback();
+        await jest.advanceTimersByTimeAsync(0);
+
+        expect(SUT._socketTimeoutRef).toBeNull();
+        expect(jest.getTimerCount()).toBe(0);
+
+        // no connect-timeout error ever fires on the disconnected client
+        await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT * 10);
+        expect(errors).toHaveLength(0);
     });
 
     // The full reconnect-then-disconnect flow lives in test/reconnect.spec.js

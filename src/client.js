@@ -246,6 +246,16 @@ class Client extends EventEmitter {
             });
             await this._socketSend({ t: 'scan' });
 
+            // disconnect() may have raced the in-flight send: its timers are
+            // already cleared, so arming one now would let it outlive the
+            // client (mirror of the guard above).
+            if (!this._socket) {
+                this._logger.info(
+                    'Skip reconnect scheduling, client is disconnected'
+                );
+                return;
+            }
+
             await this._scheduleReconnect();
             this.emit('error', new ClientConnectTimeoutError());
         } catch (err) {
