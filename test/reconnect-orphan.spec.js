@@ -142,6 +142,24 @@ describe('Reconnect timer lifecycle', () => {
         expect(settled).toHaveBeenCalled();
     });
 
+    it('should tolerate disconnect landing before the socket bind completes', async () => {
+        let bindCallback;
+        socketMock.bind = jest.fn(cb => {
+            bindCallback = cb;
+        });
+
+        SUT.connect().catch(() => {});
+        await SUT.disconnect();
+
+        // the UDP bind completes only after the socket has been released;
+        // the callback used to throw on the nulled socket (setBroadcast)
+        expect(() => bindCallback()).not.toThrow();
+
+        await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT * 10);
+        expect(errors).toHaveLength(0);
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
     // The full reconnect-then-disconnect flow lives in test/reconnect.spec.js
     // ("should keep timing out and reconnecting while unreachable, then stop
     // on disconnect"), which also asserts no timer survives disconnect().

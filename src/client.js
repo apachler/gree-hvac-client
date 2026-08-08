@@ -215,6 +215,13 @@ class Client extends EventEmitter {
             });
 
             this._socket.bind(() => {
+                if (!this._socket) {
+                    // disconnect() raced connect() before the bind completed;
+                    // the 'disconnect' handler above already rejects this
+                    // promise with ClientCancelConnectError.
+                    return;
+                }
+
                 this._socket.setBroadcast(true);
                 this._initialize().catch(reject);
             });
