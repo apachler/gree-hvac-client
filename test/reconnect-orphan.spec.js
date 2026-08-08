@@ -31,14 +31,17 @@ describe('Reconnect timer lifecycle', () => {
     beforeEach(() => {
         dgram.createSocket.mockReturnValue(createSocketMock());
 
-        jest.clearAllTimers();
-
         SUT = new Client({
             autoConnect: false,
             connectTimeout: CONNECT_TIMEOUT,
         });
         errors = [];
         SUT.on('error', e => errors.push(e));
+
+        // Constructing the client queues logger flushes (setImmediate) that
+        // jest.getTimerCount() would report. Drop them so the counts asserted
+        // below reflect only the timers the client itself arms.
+        jest.clearAllTimers();
     });
 
     afterEach(() => {
@@ -46,8 +49,6 @@ describe('Reconnect timer lifecycle', () => {
     });
 
     it('should clear a previously armed reconnect instead of stranding it', () => {
-        const baseline = jest.getTimerCount();
-
         SUT._scheduleReconnect();
         const first = SUT._socketTimeoutRef;
 
@@ -56,12 +57,12 @@ describe('Reconnect timer lifecycle', () => {
         // The second call replaced the first timer rather than leaving it armed
         // behind an unreachable reference.
         expect(SUT._socketTimeoutRef).not.toBe(first);
-        expect(jest.getTimerCount()).toBe(baseline + 1);
+        expect(jest.getTimerCount()).toBe(1);
 
         // ...so _dispose() can still reach every timer this client armed.
         SUT._dispose();
         expect(SUT._socketTimeoutRef).toBeNull();
-        expect(jest.getTimerCount()).toBe(baseline);
+        expect(jest.getTimerCount()).toBe(0);
     });
 
     it('should not reconnect once the socket is gone', async () => {
