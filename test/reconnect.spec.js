@@ -5,6 +5,7 @@ const {
     ClientConnectTimeoutError,
     ClientCancelConnectError,
 } = require('../src/errors');
+const { createSocketMock } = require('./support/socket-mock');
 
 jest.mock('dgram');
 jest.useFakeTimers();
@@ -24,14 +25,9 @@ describe('Reconnect', () => {
     let errors;
 
     beforeEach(() => {
-        dgram.createSocket.mockReturnValue({
-            bind: jest.fn(cb => cb()),
-            setBroadcast: jest.fn(),
-            // never invoked -> the mocked device stays silent, forcing timeouts
-            on: jest.fn(),
-            send: (buff, start, length, port, host, cb) => cb(),
-            close: cb => cb(),
-        });
+        // the default `on` mock is never invoked -> the mocked device stays
+        // silent, forcing timeouts
+        dgram.createSocket.mockReturnValue(createSocketMock());
 
         errors = [];
     });

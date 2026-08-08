@@ -1,6 +1,7 @@
 const dgram = require('dgram');
 
 const { Client } = require('../src/client');
+const { createSocketMock } = require('./support/socket-mock');
 
 jest.mock('dgram');
 jest.useFakeTimers();
@@ -27,13 +28,7 @@ describe('Reconnect timer lifecycle', () => {
     let SUT;
 
     beforeEach(() => {
-        dgram.createSocket.mockReturnValue({
-            bind: jest.fn(cb => cb()),
-            setBroadcast: jest.fn(),
-            on: jest.fn(),
-            send: (buff, start, length, port, host, cb) => cb(),
-            close: cb => cb(),
-        });
+        dgram.createSocket.mockReturnValue(createSocketMock());
 
         jest.clearAllTimers();
 

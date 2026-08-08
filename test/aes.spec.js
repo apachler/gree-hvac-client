@@ -4,6 +4,7 @@ const { Client } = require('../src/client');
 const { ClientConnectTimeoutError } = require('../src/errors');
 
 const device = require('./support/device');
+const { createSocketMock } = require('./support/socket-mock');
 const {
     EncryptionService,
     EcbCipher,
@@ -27,13 +28,9 @@ describe('AES encryption', () => {
         ecb = new EcbCipher();
         gcm = new GcmCipher();
 
-        dgram.createSocket.mockReturnValue({
-            bind: jest.fn(cb => cb()),
-            setBroadcast: jest.fn(),
-            on: (event, cb) => (feedClient = cb),
-            send: (buff, start, length, port, host, cb) => cb(),
-            close: cb => cb(),
-        });
+        dgram.createSocket.mockReturnValue(
+            createSocketMock({ on: (event, cb) => (feedClient = cb) })
+        );
 
         SUT = new Client({
             autoConnect: false,
