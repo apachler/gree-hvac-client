@@ -101,6 +101,30 @@ describe('Reconnect timer lifecycle', () => {
         expect(errors).toHaveLength(0);
     });
 
+    it('should not emit an error when a reconnect scan send fails after disconnect', async () => {
+        SUT.connect().catch(() => {});
+
+        // the first window elapses -> one timeout error; the reconnect starts
+        // attempt #2, whose scan send stays in flight
+        let sendCallback = null;
+        socketMock.send = (buff, start, length, port, host, cb) => {
+            sendCallback = cb;
+        };
+        await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT);
+        expect(errors).toHaveLength(1);
+        expect(sendCallback).not.toBeNull();
+
+        // disconnect() races attempt #2, then its send fails on the released
+        // socket
+        await SUT.disconnect();
+        sendCallback(new Error('socket is closed'));
+        await jest.advanceTimersByTimeAsync(0);
+
+        // the failure is discarded: no 'error' after 'disconnect', no retry
+        expect(errors).toHaveLength(1);
+        expect(jest.getTimerCount()).toBe(0);
+    });
+
     // The full reconnect-then-disconnect flow lives in test/reconnect.spec.js
     // ("should keep timing out and reconnecting while unreachable, then stop
     // on disconnect"), which also asserts no timer survives disconnect().

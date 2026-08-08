@@ -263,8 +263,16 @@ class Client extends EventEmitter {
             // released it while this attempt was in flight.
             if (this._socket) {
                 this._scheduleReconnect();
+                throw err;
             }
-            throw err;
+
+            // disconnect() raced this attempt: 'disconnect' has already been
+            // emitted and consumers may have detached their listeners, so
+            // rethrowing would surface an 'error' event after 'disconnect'.
+            this._logger.info(
+                'Discard initialize error, client is disconnected',
+                { error: err }
+            );
         }
     }
 
