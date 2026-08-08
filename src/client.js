@@ -297,9 +297,7 @@ class Client extends EventEmitter {
         // it points at: _dispose() and disconnect() can only clear what is
         // still referenced here, so a stranded one keeps firing for the
         // lifetime of the process.
-        if (this._socketTimeoutRef) {
-            clearTimeout(this._socketTimeoutRef);
-        }
+        this._clearTimer('_socketTimeoutRef');
 
         this._socketTimeoutRef = setTimeout(() => {
             this._socketTimeoutRef = null;
@@ -348,27 +346,30 @@ class Client extends EventEmitter {
     }
 
     /**
+     * Clear the referenced timer (if armed) and null the reference, so no
+     * timer is ever left behind a reference _dispose() cannot see.
+     *
+     * @param {string} refName property holding the timer reference
+     * @param {Function} clear matching clear function, clearTimeout by default
+     * @private
+     */
+    _clearTimer(refName, clear = clearTimeout) {
+        if (this[refName]) {
+            clear(this[refName]);
+            this[refName] = null;
+        }
+    }
+
+    /**
      * Cancel interval and timeout resources
      *
      * @private
      */
     _dispose() {
-        if (this._statusIntervalRef) {
-            clearInterval(this._statusIntervalRef);
-            this._statusIntervalRef = null;
-        }
-        if (this._socketTimeoutRef) {
-            clearTimeout(this._socketTimeoutRef);
-            this._socketTimeoutRef = null;
-        }
-        if (this._statusTimeoutRef) {
-            clearTimeout(this._statusTimeoutRef);
-            this._statusTimeoutRef = null;
-        }
-        if (this._bindTimeoutRef) {
-            clearTimeout(this._bindTimeoutRef);
-            this._bindTimeoutRef = null;
-        }
+        this._clearTimer('_statusIntervalRef', clearInterval);
+        this._clearTimer('_socketTimeoutRef');
+        this._clearTimer('_statusTimeoutRef');
+        this._clearTimer('_bindTimeoutRef');
     }
 
     /**
@@ -675,9 +676,7 @@ class Client extends EventEmitter {
         // Re-arming without clearing would strand the previous timer (e.g.
         // when a device retransmits its handshake) beyond the reach of
         // _dispose(), leaving it to fire after disconnect().
-        if (this._bindTimeoutRef) {
-            clearTimeout(this._bindTimeoutRef);
-        }
+        this._clearTimer('_bindTimeoutRef');
         this._bindTimeoutRef = setTimeout(() => {
             this._bindTimeoutRef = null;
             this._logger.warn('Binding attempt timed out', { timeout });
@@ -685,9 +684,7 @@ class Client extends EventEmitter {
             // A rejection inside a timer callback has no caller to bubble to;
             // unhandled it terminates the process instead of surfacing as an
             // 'error' event.
-            this._sendBindRequest(2).catch(error =>
-                this.emit('error', error)
-            );
+            this._sendBindRequest(2).catch(error => this.emit('error', error));
         }, timeout);
     }
 
@@ -702,10 +699,8 @@ class Client extends EventEmitter {
             host: this._options.host,
         });
 
-        clearTimeout(this._socketTimeoutRef);
-        this._socketTimeoutRef = null;
-        clearTimeout(this._bindTimeoutRef);
-        this._bindTimeoutRef = null;
+        this._clearTimer('_socketTimeoutRef');
+        this._clearTimer('_bindTimeoutRef');
 
         await this._requestStatus();
         if (this._options.poll) {
@@ -733,8 +728,7 @@ class Client extends EventEmitter {
     _handleStatusResponse(pack) {
         this._logger.info('Status response');
 
-        clearTimeout(this._statusTimeoutRef);
-        this._statusTimeoutRef = null;
+        this._clearTimer('_statusTimeoutRef');
 
         // Guard against malformed packets: some firmwares occasionally return a
         // status without the expected parallel `cols`/`dat` arrays. Iterating
