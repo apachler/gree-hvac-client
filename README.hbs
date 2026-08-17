@@ -12,7 +12,7 @@ A client for communicating with Gree air conditioners.
 
 ## Requirements
 
-- NodeJS (>=16)
+- NodeJS (>=18)
 
 ## Installation
 

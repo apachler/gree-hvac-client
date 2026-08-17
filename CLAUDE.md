@@ -43,7 +43,7 @@ npm run audit          # npm audit on prod deps, fail on HIGH/CRITICAL
 
 ## Conventions
 
-- **Node 16+** (`engines.node`); CI matrix also runs 18/20/22.
+- **Node 18+** (`engines.node`); CI matrix runs 18/20/22/24.
 - **Tests:** Jest, in `test/`. `test/support/device.js` mocks the UDP device
   (tests use fake timers), so no hardware is needed. Add a test with new behaviour.
 - **Style:** ESLint + Prettier — single quotes, 4-space JS, 2-space JSON/YAML.
