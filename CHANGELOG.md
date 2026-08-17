@@ -1,3 +1,10 @@
+## [3.0.7](https://github.com/apachler/gree-hvac-client/compare/v3.0.6...v3.0.7) (2026-08-17)
+
+
+### Bug Fixes
+
+* **client:** stop timers from outliving the client ([#18](https://github.com/apachler/gree-hvac-client/issues/18)) ([646887f](https://github.com/apachler/gree-hvac-client/commit/646887f1916b4c6920435af4e58e50b52d913eea))
+
 ## [3.0.6](https://github.com/apachler/gree-hvac-client/compare/v3.0.5...v3.0.6) (2026-08-07)
 
 
