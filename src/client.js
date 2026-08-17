@@ -215,6 +215,13 @@ class Client extends EventEmitter {
             });
 
             this._socket.bind(() => {
+                if (!this._socket) {
+                    // disconnect() raced connect() before the bind completed;
+                    // the 'disconnect' handler above already rejects this
+                    // promise with ClientCancelConnectError.
+                    return;
+                }
+
                 this._socket.setBroadcast(true);
                 this._initialize().catch(reject);
             });
@@ -229,6 +236,15 @@ class Client extends EventEmitter {
     async _initialize() {
         this._dispose();
 
+        if (!this._socket) {
+            // The client was disconnected before this attempt ran. Going ahead
+            // would fail in _socketSend() with ClientNotConnectedError and then
+            // arm another attempt from the catch block below, so the client
+            // would keep retrying — and emitting — forever after disconnect().
+            this._logger.info('Skip initialize, client is disconnected');
+            return;
+        }
+
         try {
             this._encryptionService = new EncryptionService(this._logger);
 
@@ -237,34 +253,71 @@ class Client extends EventEmitter {
             });
             await this._socketSend({ t: 'scan' });
 
-            await this._scheduleReconnect();
-            this.emit('error', new ClientConnectTimeoutError());
-        } catch (err) {
+            // disconnect() may have raced the in-flight send: its timers are
+            // already cleared, so arming one now would let it outlive the
+            // client (mirror of the guard above).
+            if (!this._socket) {
+                this._logger.info(
+                    'Skip reconnect scheduling, client is disconnected'
+                );
+                return;
+            }
+
             this._scheduleReconnect();
-            throw err;
+        } catch (err) {
+            // Only retry while a socket is still around: disconnect() may have
+            // released it while this attempt was in flight.
+            if (this._socket) {
+                this._scheduleReconnect();
+                throw err;
+            }
+
+            // disconnect() raced this attempt: 'disconnect' has already been
+            // emitted and consumers may have detached their listeners, so
+            // rethrowing would surface an 'error' event after 'disconnect'.
+            this._logger.info(
+                'Discard initialize error, client is disconnected',
+                { error: err }
+            );
         }
     }
 
     /**
-     * Maintain auto-reconnect
+     * Maintain auto-reconnect: arm (or re-arm) the connect-timeout timer that
+     * reports the timed-out attempt and starts the next one.
+     *
+     * Deliberately fire-and-forget: a promise resolved from the timer callback
+     * would never settle once the timer is cleared (superseded or disposed),
+     * freezing whatever chain awaits it.
      *
      * @private
      */
     _scheduleReconnect() {
-        return new Promise(resolve => {
-            this._socketTimeoutRef = setTimeout(() => {
-                this._logger.warn('Connect timeout, reconnect', {
-                    timeout: this._options.connectTimeout,
-                });
-                this._reconnectAttempt++;
+        // Overwriting the reference without clearing it strands the timer
+        // it points at: _dispose() and disconnect() can only clear what is
+        // still referenced here, so a stranded one keeps firing for the
+        // lifetime of the process.
+        this._clearTimer('_socketTimeoutRef');
 
-                this._initialize().catch(error => {
-                    this.emit('error', error);
-                    this._logger.error('Initialize error', error);
-                });
-                resolve();
-            }, this._options.connectTimeout);
-        });
+        this._socketTimeoutRef = setTimeout(() => {
+            this._socketTimeoutRef = null;
+
+            if (!this._socket) {
+                this._logger.info('Skip reconnect, client is disconnected');
+                return;
+            }
+
+            this._logger.warn('Connect timeout, reconnect', {
+                timeout: this._options.connectTimeout,
+            });
+            this.emit('error', new ClientConnectTimeoutError());
+            this._reconnectAttempt++;
+
+            this._initialize().catch(error => {
+                this.emit('error', error);
+                this._logger.error('Initialize error', error);
+            });
+        }, this._options.connectTimeout);
     }
 
     /**
@@ -293,24 +346,30 @@ class Client extends EventEmitter {
     }
 
     /**
+     * Clear the referenced timer (if armed) and null the reference, so no
+     * timer is ever left behind a reference _dispose() cannot see.
+     *
+     * @param {string} refName property holding the timer reference
+     * @param {Function} clear matching clear function, clearTimeout by default
+     * @private
+     */
+    _clearTimer(refName, clear = clearTimeout) {
+        if (this[refName]) {
+            clear(this[refName]);
+            this[refName] = null;
+        }
+    }
+
+    /**
      * Cancel interval and timeout resources
      *
      * @private
      */
     _dispose() {
-        if (this._statusIntervalRef) {
-            clearInterval(this._statusIntervalRef);
-        }
-        if (this._socketTimeoutRef) {
-            clearTimeout(this._socketTimeoutRef);
-        }
-        if (this._statusTimeoutRef) {
-            clearTimeout(this._statusTimeoutRef);
-            this._statusTimeoutRef = null;
-        }
-        if (this._bindTimeoutRef) {
-            clearTimeout(this._bindTimeoutRef);
-        }
+        this._clearTimer('_statusIntervalRef', clearInterval);
+        this._clearTimer('_socketTimeoutRef');
+        this._clearTimer('_statusTimeoutRef');
+        this._clearTimer('_bindTimeoutRef');
     }
 
     /**
@@ -613,9 +672,19 @@ class Client extends EventEmitter {
         this._logger.info('Scan success');
 
         await this._sendBindRequest(1);
-        this._bindTimeoutRef = setTimeout(async () => {
+
+        // Re-arming without clearing would strand the previous timer (e.g.
+        // when a device retransmits its handshake) beyond the reach of
+        // _dispose(), leaving it to fire after disconnect().
+        this._clearTimer('_bindTimeoutRef');
+        this._bindTimeoutRef = setTimeout(() => {
+            this._bindTimeoutRef = null;
             this._logger.warn('Binding attempt timed out', { timeout });
-            await this._sendBindRequest(2);
+
+            // A rejection inside a timer callback has no caller to bubble to;
+            // unhandled it terminates the process instead of surfacing as an
+            // 'error' event.
+            this._sendBindRequest(2).catch(error => this.emit('error', error));
         }, timeout);
     }
 
@@ -630,8 +699,8 @@ class Client extends EventEmitter {
             host: this._options.host,
         });
 
-        clearTimeout(this._socketTimeoutRef);
-        clearTimeout(this._bindTimeoutRef);
+        this._clearTimer('_socketTimeoutRef');
+        this._clearTimer('_bindTimeoutRef');
 
         await this._requestStatus();
         if (this._options.poll) {
@@ -659,8 +728,7 @@ class Client extends EventEmitter {
     _handleStatusResponse(pack) {
         this._logger.info('Status response');
 
-        clearTimeout(this._statusTimeoutRef);
-        this._statusTimeoutRef = null;
+        this._clearTimer('_statusTimeoutRef');
 
         // Guard against malformed packets: some firmwares occasionally return a
         // status without the expected parallel `cols`/`dat` arrays. Iterating

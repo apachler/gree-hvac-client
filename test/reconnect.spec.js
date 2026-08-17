@@ -5,6 +5,7 @@ const {
     ClientConnectTimeoutError,
     ClientCancelConnectError,
 } = require('../src/errors');
+const { createSocketMock } = require('./support/socket-mock');
 
 jest.mock('dgram');
 jest.useFakeTimers();
@@ -24,14 +25,9 @@ describe('Reconnect', () => {
     let errors;
 
     beforeEach(() => {
-        dgram.createSocket.mockReturnValue({
-            bind: jest.fn(cb => cb()),
-            setBroadcast: jest.fn(),
-            // never invoked -> the mocked device stays silent, forcing timeouts
-            on: jest.fn(),
-            send: (buff, start, length, port, host, cb) => cb(),
-            close: cb => cb(),
-        });
+        // the default `on` mock is never invoked -> the mocked device stays
+        // silent, forcing timeouts
+        dgram.createSocket.mockReturnValue(createSocketMock());
 
         errors = [];
     });
@@ -64,14 +60,17 @@ describe('Reconnect', () => {
         expect(errors.every(e => e instanceof ClientConnectTimeoutError)).toBe(
             true
         );
+        expect(SUT._socketTimeoutRef).not.toBeNull();
 
         // disconnect cancels the in-flight connect and clears the reconnect timer
         await SUT.disconnect();
+        expect(SUT._socketTimeoutRef).toBeNull();
         await jest.advanceTimersByTimeAsync(0); // drain the nextTick rejection
         expect(cancelError).toBeInstanceOf(ClientCancelConnectError);
 
-        // no further reconnect fires after disconnect
+        // no further reconnect fires after disconnect, and no timer survives it
         await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT * 3);
         expect(errors).toHaveLength(3);
+        expect(jest.getTimerCount()).toBe(0);
     });
 });
