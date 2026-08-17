@@ -29,7 +29,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          # semantic-release >= 25 requires Node ^22.14 || >= 24.10
+          node-version: 24
           cache: "npm"
       - run: npm ci
       - run: npx semantic-release
