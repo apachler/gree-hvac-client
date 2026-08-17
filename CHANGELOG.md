@@ -1,3 +1,13 @@
+# [4.0.0](https://github.com/apachler/gree-hvac-client/compare/v3.0.7...v4.0.0) (2026-08-17)
+
+
+* feat!: drop Node.js 16 support ([1847691](https://github.com/apachler/gree-hvac-client/commit/18476911b4e1ccde8fa4953f4e917cd1a260bac9))
+
+
+### BREAKING CHANGES
+
+* Node.js >= 18.0.0 is now required (engines.node).
+
 ## [3.0.7](https://github.com/apachler/gree-hvac-client/compare/v3.0.6...v3.0.7) (2026-08-17)
 
 
