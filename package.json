@@ -22,7 +22,6 @@
   "license": "GPL-3.0",
   "dependencies": {
     "clone": "^2.1.2",
-    "object-diff": "^0.0.4",
     "winston": "^3.17.0"
   },
   "engines": {

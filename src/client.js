@@ -2,7 +2,6 @@
 
 const dgram = require('dgram');
 const EventEmitter = require('events');
-const diff = require('object-diff');
 const clone = require('clone');
 
 const { EncryptionService } = require('./encryption-service');
@@ -753,7 +752,15 @@ class Client extends EventEmitter {
             this._properties[col] = pack.dat[i];
         });
 
-        const updatedProperties = diff(oldProperties, newProperties);
+        // Shallow strict-equality diff: keys whose value changed, with the new
+        // value. Keys absent from newProperties are ignored — a partial status
+        // response only reports the columns it carries.
+        const updatedProperties = {};
+        for (const key of Object.keys(newProperties)) {
+            if (oldProperties[key] !== newProperties[key]) {
+                updatedProperties[key] = newProperties[key];
+            }
+        }
 
         // Surface the raw vs decoded internal sensor at debug level. The +40
         // quirk has firmware-dependent variants (inwaar/node-red-contrib-gree-hvac#10):
