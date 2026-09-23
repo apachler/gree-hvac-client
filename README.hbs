@@ -25,13 +25,13 @@ self-contained npm tarball; needs no git, no build step, ideal for Docker /
 air-gapped builds):
 
 ```shell
-npm install https://github.com/apachler/gree-hvac-client/releases/download/v3.0.0/gree-hvac-client-3.0.0.tgz
+npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.1.0/gree-hvac-client-4.1.0.tgz
 ```
 
 **Or install the Git ref** (npm clones the repo at the tag):
 
 ```shell
-npm install github:apachler/gree-hvac-client#v3.0.0
+npm install github:apachler/gree-hvac-client#v4.1.0
 ```
 
 Either way you can pin it in `package.json`:
@@ -39,7 +39,7 @@ Either way you can pin it in `package.json`:
 ```json
 {
   "dependencies": {
-    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v3.0.0/gree-hvac-client-3.0.0.tgz"
+    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.1.0/gree-hvac-client-4.1.0.tgz"
   }
 }
 ```
@@ -112,21 +112,23 @@ client.on('error', error => console.error(error.message));
 
 | Command | Values | Description |
 |-|-|-|
-| **temperature** | any integer |In degrees Celsius by default |
+| **temperature** | any integer |Target setpoint, in `temperatureUnit` |
 | **currentTemperature** | any integer |In degrees Celsius by default. (Read-only) |
+| **temperatureUnit** | _celsius_, _fahrenheit_ | Unit for `temperature` |
 | **mode** | _auto_, _cool_, _heat_, _dry_, _fan_only_|Operation mode |
-| **fanspeed** | _auto_, _low_, _mediumLow_, _medium_, _mediumHigh_, _high_ | Fan speed |
-| **swinghor** | _default_, _full_, _fixedLeft_, _fixedMidLeft_, _fixedMid_, _fixedMidRight_, _fixedRight_ | Horizontal Swing |
-| **swingvert** | _default_, _full_, _fixedTop_, _fixedMidTop_, _fixedMid_, _fixedMidBottom_, _fixedBottom_, _swingBottom_, _swingMidBottom_, _swingMid_, _swingMidTop_, _swingTop_ | Vertical swing |
+| **fanSpeed** | _auto_, _low_, _mediumLow_, _medium_, _mediumHigh_, _high_ | Fan speed |
+| **swingHor** | _default_, _full_, _fixedLeft_, _fixedMidLeft_, _fixedMid_, _fixedMidRight_, _fixedRight_, _fullAlt_ | Horizontal Swing |
+| **swingVert** | _default_, _full_, _fixedTop_, _fixedMidTop_, _fixedMid_, _fixedMidBottom_, _fixedBottom_, _swingBottom_, _swingMidBottom_, _swingMid_, _swingMidTop_, _swingTop_ | Vertical swing |
 | **power** | _off_, _on_ | Turn device on/off |
 | **health** | _off_, _on_ | Health ("Cold plasma") mode, only for devices equipped with "anion generator", which absorbs dust and kills bacteria |
-| **powersave** | _off_, _on_ | Power Saving mode |
+| **powerSave** | _off_, _on_ | Power Saving mode |
 | **lights** | _off_, _on_ | Turn on/off device lights |
 | **quiet** | _off_, _mode1_, _mode2_, _mode3_ | Quiet modes |
 | **blow** | _off_, _on_ | Keeps the fan running for a while after shutting down (also called "X-Fan", only usable in Dry and Cool mode) |
 | **air** | _off_, _inside_, _outside_, _mode3_ | Fresh air valve |
 | **sleep** | _off_, _on_ | Sleep mode |
 | **turbo** | _off_, _on_ | Turbo mode |
+| **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
 
 ## Configuring HVAC WiFi
 
