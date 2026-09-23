@@ -13,7 +13,9 @@ participating you agree to uphold it.
 
 Requirements:
 
-- **Node.js 16+** (matches `engines.node`; CI also tests 18/20/22)
+- **Node.js 18+** (matches `engines.node`; CI tests 18/20/22/24)
+- **Node.js ≥ 20.19 for linting** — `eslint-plugin-jsdoc` is ESM-only, which
+  Node 18 cannot `require()`. `.nvmrc` pins 20, so `nvm use` picks it up.
 
 ```bash
 git clone https://github.com/apachler/gree-hvac-client.git
@@ -24,8 +26,9 @@ npm install
 `npm install` runs the `prepare` script, which points `core.hooksPath` at
 `./.githooks/`. The **pre-push hook** runs `eslint --fix` over the repo and
 refuses the push if ESLint reports unfixable errors, or if `--fix` produced
-changes you haven't committed (so the fix lands in a reviewable commit). Skip it
-for an emergency push with `GREE_SKIP_LINT=1 git push ...`.
+changes you haven't committed (so the fix lands in a reviewable commit). It runs
+on whatever `node` is on your `PATH`, so it needs Node ≥ 20.19 too. Skip it for
+an emergency push with `GREE_SKIP_LINT=1 git push ...`.
 
 ## Development workflow
 
@@ -35,6 +38,10 @@ npm run lint:fix      # auto-fix
 npm test              # Jest unit tests
 npm run test:coverage # Jest with a coverage summary
 npm run docs          # regenerate README.md from README.hbs (jsdoc2md)
+npm run audit         # npm audit on production deps, fails on HIGH/CRITICAL
+
+npx jest test/client.spec.js   # a single spec file
+npx jest -t "re-bind"          # only tests whose name matches
 ```
 
 > **README is generated.** Edit prose in `README.hbs`; the API section comes
@@ -43,18 +50,20 @@ npm run docs          # regenerate README.md from README.hbs (jsdoc2md)
 
 ### Project layout
 
-| Path                            | What it is                                       |
-| ------------------------------- | ------------------------------------------------ |
-| `index.js`                      | entry point — re-exports `src/client`            |
-| `src/client.js`                 | the `Client` class (connect, bind, get/set)      |
-| `src/encryption-service.js`     | AES-ECB + AES-GCM cipher (bind key exchange)     |
-| `src/property-transformer.js`   | maps friendly ↔ vendor property names            |
-| `src/property-value.js` etc.    | property / value definitions and vendor maps     |
-| `src/logger.js`                 | Winston logger setup                             |
-| `test/`                         | Jest specs (`test/support/` holds mocks/fixtures)|
-| `example/`                      | runnable usage examples (promises, async, poll)  |
-| `README.hbs`                    | Handlebars template; `README.md` is generated    |
-| `docs/PROTOCOL.md`              | the full Gree UDP/AES protocol & property reference |
+| Path                          | What it is                                          |
+| ----------------------------- | --------------------------------------------------- |
+| `index.js`                    | entry point — re-exports `src/client`               |
+| `src/client.js`               | the `Client` class (connect, bind, get/set)         |
+| `src/client-options.js`       | option defaults + `GREE_HVAC_*` env overrides       |
+| `src/errors.js`               | `ClientError` subclasses emitted as `error`         |
+| `src/encryption-service.js`   | AES-ECB + AES-GCM cipher (bind key exchange)        |
+| `src/property-transformer.js` | maps friendly ↔ vendor property names               |
+| `src/property-value.js` etc.  | property / value definitions and vendor maps        |
+| `src/logger.js`               | Winston logger setup                                |
+| `test/`                       | Jest specs (`test/support/` holds mocks/fixtures)   |
+| `example/`                    | runnable usage examples (promises, async, poll)     |
+| `README.hbs`                  | Handlebars template; `README.md` is generated       |
+| `docs/PROTOCOL.md`            | the full Gree UDP/AES protocol & property reference |
 
 ## Coding standards
 
@@ -63,7 +72,7 @@ npm run docs          # regenerate README.md from README.hbs (jsdoc2md)
 - **Tests:** Jest. Add specs next to the existing ones in `test/`. New behaviour
   should come with a test; `test/support/device.js` mocks the UDP device so you
   can test without hardware.
-- **Node version:** keep changes compatible with Node 16+.
+- **Node version:** keep changes compatible with Node 18+.
 
 ## Commit & PR conventions
 
@@ -76,8 +85,9 @@ prefixes:
 
 `feat:` `fix:` `docs:` `test:` `chore:` `refactor:` `perf:` `ci:` `build:` `style:`
 
-A `feat:` triggers a minor release, `fix:` a patch; a `!` or `BREAKING CHANGE:`
-footer triggers a major.
+A `feat:` triggers a minor release, `fix:` or `perf:` a patch; a `!` or
+`BREAKING CHANGE:` footer triggers a major. The other types (`docs:`, `build:`,
+`chore:`, … — including Dependabot's `build(deps-dev):` bumps) release nothing.
 
 Before opening a PR:
 
