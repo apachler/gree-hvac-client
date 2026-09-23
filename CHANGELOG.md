@@ -1,3 +1,10 @@
+# [4.1.0](https://github.com/apachler/gree-hvac-client/compare/v4.0.0...v4.1.0) (2026-09-23)
+
+
+### Features
+
+* **client:** recover from WiFi loss, key change and address change ([#30](https://github.com/apachler/gree-hvac-client/issues/30)) ([1924dde](https://github.com/apachler/gree-hvac-client/commit/1924ddee6328bcec5dc36425dad1f2b5f433b412))
+
 # [4.0.0](https://github.com/apachler/gree-hvac-client/compare/v3.0.7...v4.0.0) (2026-08-17)
 
 
