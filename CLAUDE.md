@@ -61,6 +61,11 @@ npm run audit          # npm audit on prod deps, fail on HIGH/CRITICAL
   `success` (a set we issued was confirmed), `no_response`, `error`, `disconnect`.
   **Always attach an `error` handler** — an unhandled `error` event terminates
   the process (Node EventEmitter semantics).
+- **Connection recovery:** after `maxNoResponse` (3) consecutive `no_response`
+  events the client re-scans and re-binds (the device may be back with a new
+  key or address); reconnect attempts back off from `connectTimeout` to
+  `reconnectMaxDelay`. Scan goes to `host`, everything after it to the address
+  the device answered from; `mac` pins the device on a broadcast `host`.
 - `setProperty` / `setProperties` take friendly `PROPERTY` keys and `VALUE`
   enums; the transformer maps them to/from the vendor wire names.
 

@@ -40,6 +40,8 @@ describe('Reconnect', () => {
         SUT = new Client({
             autoConnect: false,
             connectTimeout: CONNECT_TIMEOUT,
+            // fixed retry rate: no back-off
+            reconnectMaxDelay: CONNECT_TIMEOUT,
         });
         SUT.on('error', e => errors.push(e));
 

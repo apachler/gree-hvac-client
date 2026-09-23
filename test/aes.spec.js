@@ -29,7 +29,9 @@ describe('AES encryption', () => {
         gcm = new GcmCipher();
 
         dgram.createSocket.mockReturnValue(
-            createSocketMock({ on: (event, cb) => (feedClient = cb) })
+            createSocketMock({
+                on: (event, cb) => event === 'message' && (feedClient = cb),
+            })
         );
 
         SUT = new Client({
@@ -301,7 +303,7 @@ describe('AES encryption', () => {
                 }
             `);
 
-            await jest.advanceTimersByTimeAsync(500);
+            await jest.advanceTimersByTimeAsync(1000);
 
             // 4) client sends BIND request, attempt 2 GCM
             expect(clientEncrypt.mock.calls[1][0]).toMatchInlineSnapshot(`
@@ -460,7 +462,7 @@ describe('AES encryption', () => {
             await jest.advanceTimersByTimeAsync(1);
 
             // 3) client binds with GCM on the FIRST attempt (cipher auto-detected
-            //    from the scan response, not after the 500ms second attempt)
+            //    from the scan response, not after the bindTimeout second attempt)
             expect(clientEncrypt.mock.results[0].value.cipher).toBe('gcm');
 
             // 4) device confirms the bind with GCM

@@ -80,6 +80,31 @@ client.on('no_response', () => {
 
 ```
 
+### Connection loss and reconnect
+
+The client recovers from the device dropping off WiFi on its own:
+
+- A short outage heals by itself: polling continues and the device answers
+  again with the same key.
+- After `maxNoResponse` (default 3) consecutive `no_response` events the client
+  starts over with scan + bind. This recovers a device that came back
+  re-paired with a **new key** (MODE+WIFI resets it), which silently drops
+  requests encrypted with the old one. `connect` is emitted again once bound.
+- While the device stays unreachable, connect attempts back off exponentially
+  from `connectTimeout` up to `reconnectMaxDelay`, emitting a
+  `ClientConnectTimeoutError` per attempt.
+- With a broadcast `host` plus the device `mac`, the device is rediscovered by
+  its MAC on every reconnect, so a DHCP address change is followed. With a
+  unicast `host`, give the AC a fixed address (DHCP reservation).
+
+```javascript
+const client = new Gree.Client({
+    host: '192.168.7.255',
+    mac: 'f4911e000001',
+});
+client.on('error', error => console.error(error.message));
+```
+
 ## Properties
 
 > For the full protocol — encryption, message flow, vendor codes and the
