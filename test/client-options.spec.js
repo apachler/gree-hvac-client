@@ -12,14 +12,18 @@ describe('Client options', () => {
         ).toMatchInlineSnapshot(`
             {
               "autoConnect": true,
+              "bindTimeout": 1000,
               "connectTimeout": 3000,
               "debug": false,
               "host": "1.2.3.4",
               "logLevel": "error",
+              "mac": null,
+              "maxNoResponse": 3,
               "poll": true,
               "pollingInterval": 3000,
               "pollingTimeout": 1000,
-              "port": "1234",
+              "port": 1234,
+              "reconnectMaxDelay": 30000,
             }
         `);
     });

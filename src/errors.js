@@ -32,6 +32,21 @@ class ClientSocketSendError extends ClientError {
 }
 
 /**
+ * The UDP socket failed (e.g. it could not be bound)
+ *
+ * @class
+ * @augments ClientError
+ */
+class ClientSocketError extends ClientError {
+    /**
+     * @param {Error} cause
+     */
+    constructor(cause) {
+        super(cause.message, cause);
+    }
+}
+
+/**
  * The message received from HVAC cannot be parsed
  *
  * @class
@@ -121,6 +136,7 @@ module.exports = {
     ClientNotConnectedError,
     ClientConnectTimeoutError,
     ClientCancelConnectError,
+    ClientSocketError,
     ClientSocketSendError,
     ClientMessageParseError,
     ClientMessageUnpackError,

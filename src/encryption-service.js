@@ -117,6 +117,29 @@ class EncryptionService {
     }
 
     /**
+     * Decrypt a message with the generic (pre-bind) keys, leaving the active
+     * cipher and its device key untouched.
+     *
+     * Once bound, a late reply to an earlier bind attempt is still encrypted
+     * with a generic key, so it no longer decrypts with the device key.
+     *
+     * @param {object} input Response object
+     * @param {string} input.pack Encrypted JSON string
+     * @returns {object|null} the payload, or null if neither generic key fits
+     */
+    decryptGeneric(input) {
+        for (const cipher of [new EcbCipher(), new GcmCipher()]) {
+            try {
+                return cipher.decrypt(input).payload;
+            } catch {
+                // try the next cipher
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Encrypt UDP message
      *
      * @param {object} output Request object

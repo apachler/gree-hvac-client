@@ -80,6 +80,31 @@ client.on('no_response', () => {
 
 ```
 
+### Connection loss and reconnect
+
+The client recovers from the device dropping off WiFi on its own:
+
+- A short outage heals by itself: polling continues and the device answers
+  again with the same key.
+- After `maxNoResponse` (default 3) consecutive `no_response` events the client
+  starts over with scan + bind. This recovers a device that came back
+  re-paired with a **new key** (MODE+WIFI resets it), which silently drops
+  requests encrypted with the old one. `connect` is emitted again once bound.
+- While the device stays unreachable, connect attempts back off exponentially
+  from `connectTimeout` up to `reconnectMaxDelay`, emitting a
+  `ClientConnectTimeoutError` per attempt.
+- With a broadcast `host` plus the device `mac`, the device is rediscovered by
+  its MAC on every reconnect, so a DHCP address change is followed. With a
+  unicast `host`, give the AC a fixed address (DHCP reservation).
+
+```javascript
+const client = new Gree.Client({
+    host: '192.168.7.255',
+    mac: 'f4911e000001',
+});
+client.on('error', error => console.error(error.message));
+```
+
 ## Properties
 
 > For the full protocol — encryption, message flow, vendor codes and the
@@ -126,6 +151,9 @@ Note: This command may vary depending on your OS (e.g. Linux, macOS, CygWin). If
 <dd></dd>
 <dt><a href="#ClientSocketSendError">ClientSocketSendError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
 <dd><p>Connectivity problems while communicating with HVAC</p>
+</dd>
+<dt><a href="#ClientSocketError">ClientSocketError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
+<dd><p>The UDP socket failed (e.g. it could not be bound)</p>
 </dd>
 <dt><a href="#ClientMessageParseError">ClientMessageParseError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
 <dd><p>The message received from HVAC cannot be parsed</p>
@@ -185,6 +213,7 @@ Control GREE HVAC device by getting and setting its properties
     * [.getDeviceId()](#Client+getDeviceId) ⇒ <code>string</code> \| <code>null</code>
     * ~~[.setDebug(enable)](#Client+setDebug)~~
     * ["connect"](#Client+event_connect)
+    * ["no_response" (client)](#Client+event_no_response)
     * ["success" (updated, properties)](#Client+event_success)
     * ["update" (updated, properties)](#Client+event_update)
     * ["error" (error)](#Client+event_error)
@@ -308,9 +337,22 @@ Use the client `logLevel` option instead
 <a name="Client+event_connect"></a>
 
 ### "connect"
-Emitted when successfully connected to the HVAC
+Emitted when successfully connected to the HVAC, and again after every
+automatic re-bind (see the `maxNoResponse` option)
 
 **Kind**: event emitted by [<code>Client</code>](#Client)  
+<a name="Client+event_no_response"></a>
+
+### "no_response" (client)
+Emitted when the HVAC did not answer a status request within
+`pollingTimeout`
+
+**Kind**: event emitted by [<code>Client</code>](#Client)  
+
+| Param | Type |
+| --- | --- |
+| client | [<code>Client</code>](#Client) | 
+
 <a name="Client+event_success"></a>
 
 ### "success" (updated, properties)
@@ -379,6 +421,21 @@ Connectivity problems while communicating with HVAC
 <a name="new_ClientSocketSendError_new"></a>
 
 ### new ClientSocketSendError(cause)
+
+| Param | Type |
+| --- | --- |
+| cause | <code>Error</code> | 
+
+<a name="ClientSocketError"></a>
+
+## ClientSocketError ⇐ [<code>ClientError</code>](#ClientError)
+The UDP socket failed (e.g. it could not be bound)
+
+**Kind**: global class  
+**Extends**: [<code>ClientError</code>](#ClientError)  
+<a name="new_ClientSocketError_new"></a>
+
+### new ClientSocketError(cause)
 
 | Param | Type |
 | --- | --- |
@@ -463,11 +520,15 @@ Client options
 | --- | --- | --- | --- |
 | host | <code>string</code> | <code>&quot;192.168.1.255&quot;</code> | GREE device ip-address |
 | port | <code>number</code> | <code>7000</code> | GREE device UDP port |
+| mac | <code>string</code> \| <code>null</code> | <code>null</code> | Only bind to the device with this MAC-address (`cid`), with or without colons. Recommended when `host` is a broadcast address: the device is then rediscovered by its MAC on every reconnect, so a DHCP address change is followed automatically. |
 | connectTimeout | <code>number</code> | <code>3000</code> | Reconnect to device if no success timeout |
+| reconnectMaxDelay | <code>number</code> | <code>30000</code> | Upper bound for the reconnect back-off: each consecutive failed attempt doubles the wait (starting at `connectTimeout`) up to this value. Set it to `connectTimeout` to retry at a fixed rate. |
+| bindTimeout | <code>number</code> | <code>1000</code> | Wait for a bind confirmation before retrying the bind with the other cipher (AES-GCM) |
 | autoConnect | <code>boolean</code> | <code>true</code> | Automatically connect to device when client is created. Alternatively method `connect()` can be used. |
 | poll | <code>boolean</code> | <code>true</code> | Poll device properties |
 | pollingInterval | <code>number</code> | <code>3000</code> | Device properties polling interval |
 | pollingTimeout | <code>number</code> | <code>1000</code> | Device properties polling timeout, emits `no_response` events in case of no response from HVAC device for a status request |
+| maxNoResponse | <code>number</code> | <code>3</code> | Re-scan and re-bind the device after this many consecutive `no_response` events (the device may have dropped off WiFi, been re-paired with a new key or moved to another address). `0` disables it. |
 | logLevel | <code>string</code> | <code>&quot;error&quot;</code> | Logging level (debug, info, warn, error) |
 | debug | <code>boolean</code> | <code>false</code> | Override logLevel to debug, deprecated, use logLevel option |
 

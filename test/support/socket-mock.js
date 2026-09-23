@@ -6,7 +6,7 @@
  * different behaviour override individual methods, most commonly `on` to
  * capture the message callback and feed device responses back:
  *
- *     createSocketMock({ on: (event, cb) => (feedClient = cb) });
+ *     createSocketMock({ on: (event, cb) => event === 'message' && (feedClient = cb) });
  *
  * @param {object} overrides methods to replace on the mock
  * @returns {object} a dgram.Socket stand-in

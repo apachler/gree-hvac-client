@@ -52,7 +52,9 @@ describe('Status timeout', () => {
         ecb = new EcbCipher();
 
         dgram.createSocket.mockReturnValue(
-            createSocketMock({ on: (event, cb) => (feedClient = cb) })
+            createSocketMock({
+                on: (event, cb) => event === 'message' && (feedClient = cb),
+            })
         );
 
         SUT = new Client({

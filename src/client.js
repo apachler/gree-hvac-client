@@ -18,6 +18,7 @@ const {
     ClientError,
     ClientMessageParseError,
     ClientMessageUnpackError,
+    ClientSocketError,
     ClientSocketSendError,
     ClientUnknownMessageError,
     ClientNotConnectedError,
@@ -38,9 +39,18 @@ class Client extends EventEmitter {
      */
 
     /**
-     * Emitted when successfully connected to the HVAC
+     * Emitted when successfully connected to the HVAC, and again after every
+     * automatic re-bind (see the `maxNoResponse` option)
      *
      * @event Client#connect
+     */
+
+    /**
+     * Emitted when the HVAC did not answer a status request within
+     * `pollingTimeout`
+     *
+     * @param {Client} client
+     * @event Client#no_response
      */
 
     /**
@@ -101,6 +111,39 @@ class Client extends EventEmitter {
          * @private
          */
         this._cid = null;
+
+        /**
+         * Address the device answered the scan from; bind and status requests
+         * go there, so a broadcast `host` only carries the scan
+         *
+         * @type {string|null}
+         * @private
+         */
+        this._deviceAddress = null;
+
+        /**
+         * A device answered the scan of the current connect attempt
+         *
+         * @type {boolean}
+         * @private
+         */
+        this._handshaken = false;
+
+        /**
+         * The current connect attempt got its binding confirmation
+         *
+         * @type {boolean}
+         * @private
+         */
+        this._bound = false;
+
+        /**
+         * Consecutive status requests without a response
+         *
+         * @type {number}
+         * @private
+         */
+        this._noResponseCount = 0;
 
         /**
          * @type {dgram.Socket|null}
@@ -206,8 +249,14 @@ class Client extends EventEmitter {
             });
 
             this._socket = dgram.createSocket('udp4');
-            this._socket.on('message', message => {
-                this._handleResponse(message).catch(error => {
+            // Without a listener a socket 'error' (e.g. a failing bind) is
+            // thrown and terminates the process.
+            this._socket.on('error', error => {
+                this._logger.error('Socket error', error);
+                this.emit('error', new ClientSocketError(error));
+            });
+            this._socket.on('message', (message, rinfo) => {
+                this._handleResponse(message, rinfo).catch(error => {
                     this._logger.error('Response handle error', error);
                     this.emit('error', error);
                 });
@@ -246,6 +295,10 @@ class Client extends EventEmitter {
 
         try {
             this._encryptionService = new EncryptionService(this._logger);
+            this._deviceAddress = null;
+            this._handshaken = false;
+            this._bound = false;
+            this._noResponseCount = 0;
 
             this._logger.info('Scan start', {
                 attempt: this._reconnectAttempt,
@@ -298,6 +351,17 @@ class Client extends EventEmitter {
         // lifetime of the process.
         this._clearTimer('_socketTimeoutRef');
 
+        // Exponential back-off: connectTimeout, 2x, 4x, ... capped at
+        // reconnectMaxDelay. Devices rate-limit scan/bind requests, and a unit
+        // that is off WiFi for hours needs no scan every few seconds.
+        const timeout = Math.min(
+            this._options.connectTimeout * 2 ** (this._reconnectAttempt - 1),
+            Math.max(
+                this._options.reconnectMaxDelay,
+                this._options.connectTimeout
+            )
+        );
+
         this._socketTimeoutRef = setTimeout(() => {
             this._socketTimeoutRef = null;
 
@@ -306,9 +370,7 @@ class Client extends EventEmitter {
                 return;
             }
 
-            this._logger.warn('Connect timeout, reconnect', {
-                timeout: this._options.connectTimeout,
-            });
+            this._logger.warn('Connect timeout, reconnect', { timeout });
             this.emit('error', new ClientConnectTimeoutError());
             this._reconnectAttempt++;
 
@@ -316,7 +378,7 @@ class Client extends EventEmitter {
                 this.emit('error', error);
                 this._logger.error('Initialize error', error);
             });
-        }, this._options.connectTimeout);
+        }, timeout);
     }
 
     /**
@@ -460,10 +522,17 @@ class Client extends EventEmitter {
      * @private
      */
     _createLogger(level) {
-        this._logger = createLogger(level).child({
+        /**
+         * Logger without the device `cid`, so every handshake derives its
+         * child from here instead of nesting one more child per reconnect
+         *
+         * @private
+         */
+        this._baseLogger = createLogger(level).child({
             service: 'client',
             sid: randomUUID(),
         });
+        this._logger = this._baseLogger;
         this._encryptionService = new EncryptionService(this._logger);
     }
 
@@ -509,7 +578,9 @@ class Client extends EventEmitter {
                     0,
                     toSend.length,
                     this._options.port,
-                    this._options.host,
+                    request.t === 'scan'
+                        ? this._options.host
+                        : this._deviceAddress || this._options.host,
                     error => {
                         if (!error) {
                             resolve();
@@ -555,12 +626,24 @@ class Client extends EventEmitter {
     async _requestStatus() {
         this._logger.info('Status request');
 
+        // Armed before sending, so a request that cannot even be sent (e.g.
+        // ENETUNREACH while the network is down) counts as unanswered too.
+        this._armStatusTimeout();
+
         await this._sendRequest({
             cols: this._transformer.arrayToVendor(Object.keys(PROPERTY)),
             mac: this._cid,
             t: 'status',
         });
+    }
 
+    /**
+     * Arm the status timeout unless one is already armed
+     *
+     * @fires Client#no_response
+     * @private
+     */
+    _armStatusTimeout() {
         // Keep at most one status timeout armed. Re-arming on every poll would
         // orphan the previous timer when pollingTimeout >= pollingInterval
         // (spurious no_response despite valid replies, issue #7), while
@@ -579,35 +662,83 @@ class Client extends EventEmitter {
             });
 
             this._properties = {};
+            this._noResponseCount++;
             this.emit('no_response', this);
+
+            this._rebindIfUnresponsive();
         }, this._options.pollingTimeout);
+    }
+
+    /**
+     * Start over with scan + bind once the device has missed `maxNoResponse`
+     * status requests in a row.
+     *
+     * Polling alone recovers from a short WiFi drop, but not when the device
+     * comes back re-paired with a new key (it silently drops requests
+     * encrypted with the old one) or with another DHCP address; both need a
+     * fresh scan and bind.
+     *
+     * @private
+     */
+    _rebindIfUnresponsive() {
+        const max = this._options.maxNoResponse;
+        if (!max || this._noResponseCount < max || !this._socket) {
+            return;
+        }
+
+        this._logger.warn('Device unresponsive, rebind', {
+            noResponse: this._noResponseCount,
+        });
+
+        this._initialize().catch(error => {
+            this.emit('error', error);
+            this._logger.error('Initialize error', error);
+        });
     }
 
     /**
      * Handle UDP response from device
      *
      * @param {Buffer} buffer Serialized JSON string with message
+     * @param {dgram.RemoteInfo} [rinfo] Sender of the message
      * @fires Client#error
      * @private
      */
-    async _handleResponse(buffer) {
+    async _handleResponse(buffer, rinfo) {
         const message = this._parse(buffer);
 
         this._logger.debug('Handle response', { request: message });
 
-        // Extract encrypted package from message using device key (if available)
-        const pack = this._unpack(message);
+        let pack;
+        try {
+            // Extract encrypted package from message using device key (if available)
+            pack = this._unpack(message);
+        } catch (error) {
+            // A late scan or bind reply arriving after the bind succeeded is
+            // encrypted with a generic key: not an error.
+            const late = this._bound
+                ? this._encryptionService.decryptGeneric(message)
+                : null;
+            if (late && ['dev', 'bindok'].includes(late.t)) {
+                this._logger.debug('Late scan/bind response, ignoring', {
+                    t: late.t,
+                });
+                return;
+            }
+
+            throw error;
+        }
 
         // If package type is response to handshake
         if (pack.t === 'dev') {
-            await this._handleHandshakeResponse(pack);
+            await this._handleHandshakeResponse(pack, message, rinfo);
             return;
         }
 
         if (this._cid) {
             // If package type is binding confirmation
             if (pack.t === 'bindok') {
-                this._handleBindingConfirmationResponse();
+                await this._handleBindingConfirmationResponse();
                 return;
             }
 
@@ -660,15 +791,50 @@ class Client extends EventEmitter {
     /**
      * Handle device handshake response
      *
-     * @param message
-     * @param {number} timeout
+     * @param {object} pack decrypted scan response
+     * @param {object} message the enclosing message
+     * @param {dgram.RemoteInfo} [rinfo] sender of the message
      * @private
      */
-    async _handleHandshakeResponse(message, timeout = 500) {
-        this._cid = message.cid || message.mac;
+    async _handleHandshakeResponse(pack, message, rinfo) {
+        // Some firmwares (e.g. 1.23) leave cid/mac of the scan response empty;
+        // the enclosing message still carries the device cid.
+        const cid = pack.cid || pack.mac || message.cid;
 
-        this._logger = this._logger.child({ cid: this._cid });
-        this._logger.info('Scan success');
+        if (
+            this._options.mac &&
+            normalizeMac(cid) !== normalizeMac(this._options.mac)
+        ) {
+            this._logger.debug('Scan response from another device, ignoring', {
+                cid,
+            });
+            return;
+        }
+
+        // A broadcast scan is answered by every device on the network: stick
+        // to the first one instead of re-binding to whichever answers last.
+        if (this._handshaken && cid !== this._cid) {
+            this._logger.debug('Scan response from another device, ignoring', {
+                cid,
+            });
+            return;
+        }
+
+        // Already bound: re-binding would switch the cipher back to a generic
+        // key on its retry and break polling until the next rebind.
+        if (this._bound) {
+            this._logger.debug('Scan response after binding, ignoring');
+            return;
+        }
+
+        this._handshaken = true;
+        this._cid = cid;
+        this._deviceAddress = rinfo?.address || null;
+
+        this._logger = this._baseLogger.child({ cid: this._cid });
+        this._logger.info('Scan success', { address: this._deviceAddress });
+
+        const timeout = this._options.bindTimeout;
 
         await this._sendBindRequest(1);
 
@@ -694,17 +860,36 @@ class Client extends EventEmitter {
      * @private
      */
     async _handleBindingConfirmationResponse() {
+        // The device may confirm both bind attempts (or retransmit); a second
+        // confirmation must not start a second polling interval.
+        if (this._bound) {
+            this._logger.debug('Duplicate binding confirmation, ignoring');
+            return;
+        }
+        this._bound = true;
+        this._reconnectAttempt = 1;
+
         this._logger.info('Binding success (connected)', {
-            host: this._options.host,
+            host: this._deviceAddress || this._options.host,
         });
 
         this._clearTimer('_socketTimeoutRef');
         this._clearTimer('_bindTimeoutRef');
 
-        await this._requestStatus();
+        // A failing first request (e.g. the network dropped right after the
+        // bind) must not abort the connect: polling and the no-response
+        // rebind take it from here.
+        await this._requestStatus().catch(error => this.emit('error', error));
+
+        if (!this._socket) {
+            // disconnect() raced the status request
+            return;
+        }
+
         if (this._options.poll) {
             this._logger.info('Schedule status polling');
 
+            this._clearTimer('_statusIntervalRef', clearInterval);
             this._statusIntervalRef = setInterval(
                 () =>
                     this._requestStatus().catch(error =>
@@ -728,6 +913,7 @@ class Client extends EventEmitter {
         this._logger.info('Status response');
 
         this._clearTimer('_statusTimeoutRef');
+        this._noResponseCount = 0;
 
         // Guard against malformed packets: some firmwares occasionally return a
         // status without the expected parallel `cols`/`dat` arrays. Iterating
@@ -827,6 +1013,16 @@ class Client extends EventEmitter {
         );
     }
 }
+
+/**
+ * @param {string} mac
+ * @returns {string} lower-case MAC-address without separators
+ * @private
+ */
+const normalizeMac = mac =>
+    String(mac || '')
+        .replace(/[^0-9a-f]/gi, '')
+        .toLowerCase();
 
 module.exports = {
     Client,

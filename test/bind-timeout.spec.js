@@ -12,7 +12,7 @@ jest.useFakeTimers();
 /**
  * Regression test for the dangling bind-retry timer (U4 / upstream PR #29).
  *
- * `_handleHandshakeResponse` arms `_bindTimeoutRef` — a 500 ms timer that fires
+ * `_handleHandshakeResponse` arms `_bindTimeoutRef` — a `bindTimeout` (1000 ms) timer that fires
  * a second bind attempt if the first isn't confirmed. `_dispose()` must clear
  * it, otherwise a `disconnect()` landing inside that window leaves the timer to
  * fire on a closed/nulled socket (spurious second bind + unhandled
@@ -32,7 +32,9 @@ describe('Bind timeout', () => {
     beforeEach(() => {
         ecb = new EcbCipher();
 
-        socketMock = createSocketMock({ on: (event, cb) => (feedClient = cb) });
+        socketMock = createSocketMock({
+            on: (event, cb) => event === 'message' && (feedClient = cb),
+        });
         dgram.createSocket.mockReturnValue(socketMock);
 
         SUT = new Client({ autoConnect: false });
@@ -53,16 +55,16 @@ describe('Bind timeout', () => {
 
     it('should clear the pending bind timer on disconnect and not send a second bind', async () => {
         // device answers SCAN -> client sends BIND attempt 1 and arms the
-        // 500 ms bind-retry timer
+        // 1000 ms bind-retry timer
         feedClient(device.scan(ecb).payload);
         await jest.advanceTimersByTimeAsync(100);
         expect(bindAttempts()).toBe(1);
 
-        // disconnect before the 500 ms bind-retry fires
+        // disconnect before the 1000 ms bind-retry fires
         await SUT.disconnect();
 
         // advance well past the bind-retry timeout
-        await jest.advanceTimersByTimeAsync(1000);
+        await jest.advanceTimersByTimeAsync(2000);
 
         // the dangling timer must not have fired a second bind...
         expect(bindAttempts()).toBe(1);
@@ -82,7 +84,7 @@ describe('Bind timeout', () => {
         // disconnect inside the retry window must reach every armed timer —
         // re-arming used to strand the first one behind an overwritten ref
         await SUT.disconnect();
-        await jest.advanceTimersByTimeAsync(1000);
+        await jest.advanceTimersByTimeAsync(2000);
 
         expect(bindAttempts()).toBe(2);
         expect(errors).toHaveLength(0);
@@ -99,7 +101,7 @@ describe('Bind timeout', () => {
         socketMock.send = (buff, start, length, port, host, cb) =>
             cb(new Error('send failed'));
 
-        await jest.advanceTimersByTimeAsync(500);
+        await jest.advanceTimersByTimeAsync(1000); // default bindTimeout
 
         expect(bindAttempts()).toBe(2);
         expect(errors).toHaveLength(1);
