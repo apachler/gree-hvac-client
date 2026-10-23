@@ -7,6 +7,7 @@
  * @property {string} power.on
  * @property {string} power.off
  * @property {string} mode.auto
+ * @property {string} mode.cool
  * @property {string} mode.dry
  * @property {string} mode.fan_only
  * @property {string} mode.heat

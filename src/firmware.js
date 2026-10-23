@@ -11,6 +11,8 @@
  */
 const CLOUD_ONLY_FIRMWARE = {
     362001066300: { module: '4MWB05DF13', lastLan: '3.05', cloudOnly: '3.27' },
+    // not monotonic: 2.04 is cloud-only, 2.06 works locally again
+    362001067540: { module: 'WB05WR13', lastLan: '2.06', cloudOnly: '2.04' },
     362001067541: { module: 'WB05WR11', lastLan: '2.04', cloudOnly: '2.08' },
     362001068254: { module: '4MWB65VR', lastLan: '2.11', cloudOnly: '2.12' },
     362001068295: { module: '4MWB05UR', lastLan: '2.02', cloudOnly: '2.04' },

@@ -176,7 +176,8 @@ After the probes the client asks once for the `hid` status column, e.g.
 version. `getDeviceInfo()` reports it, and warns for firmware codes whose
 later builds were found to be cloud-only (no local control at all), from
 [greeclimate's list](https://github.com/cmroche/greeclimate/blob/master/docs/CLOUD_ONLY_FIRMWARE.md)
-— upgrading those modules can end local control for good. Some units report
+— upgrading those modules can end local control for good. The README has the
+table: [Firmware updates can end local control](../README.md#firmware-updates-can-end-local-control). Some units report
 `hid` in the scan answer already; others not at all.
 
 ### Raw vendor codes, clock and name

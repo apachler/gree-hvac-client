@@ -1,4 +1,6 @@
 /**
+ * Base class of every error the client emits or rejects with
+ *
  * @class
  * @augments Error
  */
@@ -67,7 +69,7 @@ class ClientMessageParseError extends ClientError {
 }
 
 /**
- * The package from the message received from HVAC cannot be decrypt
+ * The package from the message received from HVAC cannot be decrypted
  *
  * @class
  * @augments ClientError
@@ -93,12 +95,12 @@ class ClientUnknownMessageError extends ClientError {
      * @param {Object<string, unknown>} props
      */
     constructor(props) {
-        super('Unknown message type received', props);
+        super('Unknown message type received', undefined, props);
     }
 }
 
 /**
- * Request operations on not connected to the HVAC client
+ * The client is not connected to the HVAC (yet), or was disconnected
  *
  * @class
  * @augments ClientError
@@ -110,6 +112,9 @@ class ClientNotConnectedError extends ClientError {
 }
 
 /**
+ * A connect attempt got no scan or bind answer within `connectTimeout`; the
+ * client keeps retrying
+ *
  * @class
  * @augments ClientError
  */

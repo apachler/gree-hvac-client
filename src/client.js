@@ -79,7 +79,7 @@ class Client extends EventEmitter {
      * @property {string} mac Device MAC-address (`cid`), usable as the `mac` client option
      * @property {string} name Device name as configured in the vendor app
      * @property {string} address IP-address the device answered from, usable as the `host` client option
-     * @property {string} [version] Firmware version, e.g. `V1.1.13`
+     * @property {string} [version] WiFi module version, e.g. `V1.1.13` (`getDeviceInfo()` has the firmware id)
      * @property {number} subUnits Number of indoor units behind it when it is the WiFi module of a multi-split outdoor unit, else `0` (list them with `getSubUnits()`)
      * @property {object} pack The full decrypted scan answer (brand, model, ...)
      */
@@ -113,6 +113,7 @@ class Client extends EventEmitter {
      * Emitted when successfully connected to the HVAC, and again after every
      * automatic re-bind (see the `maxNoResponse` option)
      *
+     * @param {Client} client
      * @event Client#connect
      */
 
@@ -129,6 +130,7 @@ class Client extends EventEmitter {
      *
      * @param {PropertyMap} updated The properties and their values that were updated
      * @param {PropertyMap} properties All the properties and their values managed by the Client
+     * @param {Client} client
      * @event Client#success
      */
 
@@ -137,6 +139,7 @@ class Client extends EventEmitter {
      *
      * @param {PropertyMap} updated The properties and their values that were updated
      * @param {PropertyMap} properties All the properties and their values managed by the Client
+     * @param {Client} client
      * @event Client#update
      */
 
@@ -161,6 +164,8 @@ class Client extends EventEmitter {
      * @param {CLIENT_OPTIONS | {}} options
      * @fires Client#connect
      * @fires Client#update
+     * @fires Client#success
+     * @fires Client#no_response
      * @fires Client#error
      * @fires Client#disconnect
      * @example
@@ -361,7 +366,7 @@ class Client extends EventEmitter {
      * @returns {Promise<DiscoveredDevice[]>} one entry per device, in order of answer
      * @example
      * const devices = await Gree.Client.discover({host: '192.168.1.255'});
-     * // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.1.42', version: 'V1.1.13', pack: {...}}]
+     * // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.1.42', version: 'V1.1.13', subUnits: 0, pack: {...}}]
      *
      * const client = new Gree.Client({host: devices[0].address});
      */
@@ -451,7 +456,7 @@ class Client extends EventEmitter {
      * Connect a unit in AP (setup) mode to your WiFi network, without the
      * vendor app. Reset the unit's WiFi first (MODE + WIFI, or MODE + TURBO,
      * on the remote for 5 s), join the unit's own WiFi network (named after
-     * the last digits of its MAC, password usually `12345678`), then call
+     * the last digits of its MAC on many units, password usually `12345678`), then call
      * this. The unit gets a new device key, so a client bound before re-binds.
      *
      * @param {object} options
@@ -543,7 +548,7 @@ class Client extends EventEmitter {
     /**
      * Connect to a HVAC device and start polling status changes by default
      *
-     * @returns {Promise}
+     * @returns {Promise<Client>} resolves once bound
      * @fires Client#connect
      * @fires Client#error
      */

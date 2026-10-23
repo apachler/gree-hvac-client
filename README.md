@@ -54,6 +54,8 @@ const Gree = require('gree-hvac-client');
 
 const client = new Gree.Client({host: '192.168.7.60'});
 
+// Always handle errors: an unhandled 'error' event terminates the process
+client.on('error', error => console.error(error.message));
 client.on('connect', () => {
     client.setProperty(Gree.PROPERTY.temperature, 25);
     client.setProperty(Gree.PROPERTY.lights, Gree.VALUE.lights.off);
@@ -68,6 +70,7 @@ const Gree = require('gree-hvac-client');
 
 const client = new Gree.Client({host: '192.168.7.60'});
 
+client.on('error', error => console.error(error.message));
 client.on('connect', (client) => {
     console.log('connected to', client.getDeviceId());
 });
@@ -97,10 +100,16 @@ Read the current state on demand (instead of waiting for the next poll):
 const client = new Gree.Client({host: '192.168.7.60', autoConnect: false, poll: false});
 client.on('error', error => console.error(error.message));
 
-await client.connect();
-const properties = await client.getProperties();
-console.log(properties.temperature, properties.currentTemperature);
+(async () => {
+    await client.connect();
+    const properties = await client.getProperties();
+    console.log(properties.temperature, properties.currentTemperature);
+    await client.disconnect();
+})();
 ```
+
+The snippets below use `await` too: run them inside an `async` function, as
+here (CommonJS has no top-level `await`).
 
 `getProperties()` rejects with `ClientNoResponseError` when the unit does not
 answer within `pollingTimeout`. The error classes are exported
@@ -115,6 +124,7 @@ List the indoor units, then create one client per indoor unit with the
 
 ```javascript
 const gateway = new Gree.Client({host: '192.168.7.70', poll: false});
+gateway.on('error', error => console.error(error.message));
 gateway.on('connect', async () => {
     const units = await gateway.getSubUnits(); // [{mac: 'c0000001a2b3c4'}, ...]
     await gateway.disconnect();
@@ -139,8 +149,11 @@ read-only properties and unknown values at compile time.
 ### Check your unit
 
 `example/probe.js` connects to one unit and prints every vendor code it
-reports, raw and decoded, which optional sensors it answered and its indoor
-units — handy to check a value that looks wrong, and to attach to an issue:
+reports, raw and decoded, which optional sensors it answered, its firmware id
+(with a warning for firmwares listed in
+[Firmware updates](#firmware-updates-can-end-local-control)), its clock and
+its indoor units — handy to check a value that looks wrong, and to attach to
+an issue:
 
 ```shell
 node node_modules/gree-hvac-client/example/probe.js 192.168.7.60
@@ -176,14 +189,14 @@ client.on('error', error => console.error(error.message));
 > For the full protocol — encryption, message flow, vendor codes and the
 > `TemSen +40` quirk — see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-| Command | Values | Description |
+| Property | Values | Description |
 |-|-|-|
-| **temperature** | any integer |Target setpoint, in `temperatureUnit` (whole °F are encoded exactly, see [Fahrenheit setpoints](docs/PROTOCOL.md#fahrenheit-setpoints-temrec)) |
+| **temperature** | number |Target setpoint, in the unit's `temperatureUnit`: whole °F (encoded exactly, see [Fahrenheit setpoints](docs/PROTOCOL.md#fahrenheit-setpoints-temrec)), whole °C, or half °C with the `halfDegree` option |
 | **currentTemperature** | any integer |Indoor sensor in °C. (Read-only) |
 | **outdoorTemperature** | any integer |Outdoor sensor in °C, `0` if the unit has none. (Read-only, optional) |
 | **humidity** | any integer |Indoor relative humidity in %. (Read-only, optional) |
 | **errorCode** | any integer |Fault code, `0` = no fault. (Read-only, optional) |
-| **temperatureUnit** | _celsius_, _fahrenheit_ | Unit for `temperature` |
+| **temperatureUnit** | _celsius_, _fahrenheit_ | Unit for `temperature` (and for the unit's display) |
 | **mode** | _auto_, _cool_, _heat_, _dry_, _fan_only_|Operation mode |
 | **fanSpeed** | _auto_, _low_, _mediumLow_, _medium_, _mediumHigh_, _high_ | Fan speed |
 | **swingHor** | _default_, _full_, _fixedLeft_, _fixedMidLeft_, _fixedMid_, _fixedMidRight_, _fixedRight_, _fullAlt_ | Horizontal Swing |
@@ -229,14 +242,49 @@ There is no way to feed an external temperature sensor to the unit over the
 LAN (iFeel works from the IR remote only); see
 [docs/PROTOCOL.md](docs/PROTOCOL.md#external-temperature-sensor-ifeel).
 
+## Firmware updates can end local control
+
+Some WiFi-module firmware updates, offered in the Gree+ app, switch a unit
+to **cloud-only** control: it stops answering on UDP port 7000, and this
+client (like every local integration) can no longer reach it. Gree confirmed
+this to users and offers no official downgrade
+([home-assistant/core#176486](https://github.com/home-assistant/core/issues/176486)).
+
+Find your unit's firmware code with `client.getDeviceInfo()` (`firmwareCode`,
+`firmwareVersion`) or `example/probe.js`; the Gree+ app shows the version
+only. **If your firmware code is listed below, don't install WiFi-module
+updates beyond the last version that still works locally.**
+
+| Firmware code | Module | Reported on | Last version verified to work locally | First cloud-only version found |
+| --- | --- | --- | --- | --- |
+| `362001068254` | `4MWB65VR` | Gree Airy, Gree Clivia | **2.11** | 2.12 |
+| `362001067541` | `WB05WR11` | Gree GWH12ATCXB-D6DNA4B/I | **2.04** | 2.08 |
+| `362001066300` | `4MWB05DF13` | unknown | **3.05** | 3.27 |
+| `362001068295` | `4MWB05UR` | unknown | **2.02** | 2.04 |
+| `362001067540` | `WB05WR13` | unknown | **2.06** | 2.04 — versions are not in order: 2.04 is cloud-only, 2.06 works again |
+| `362001068411` | `WB05HR13` | unknown | none found | 1.02 |
+| `362001071519` | `4MWB65AR11` | Gree Clivia R22 | none found | 2.00 (2.04 reported) |
+
+Source: [greeclimate's cloud-only firmware list](https://github.com/cmroche/greeclimate/blob/master/docs/CLOUD_ONLY_FIRMWARE.md) (as of 17 October
+2026; firmware names in [its known HIDs](https://github.com/cmroche/greeclimate/blob/master/docs/HIDS.md)). These are the builds
+that were inspected, not a complete cutoff: a code missing here is no promise
+that its updates are safe, and versions can't be compared across firmware
+codes. `getDeviceInfo()` sets `upgradeWarning` for the codes above.
+
+Units already on a cloud-only version: users report downgrading
+`362001068254` from 2.12 to 2.11 through the unit's cloud connection (see
+the issue above) — unofficial, and a wrong image can brick the WiFi module.
+Blocking the unit's internet access does not bring local control back.
+
 ## Configuring HVAC WiFi
 
 1. Make sure your HVAC is running in AP mode. You can reset the WiFi config by pressing MODE +WIFI (or MODE + TURBO) on the AC remote for 5s.
-2. Connect with the AP wifi network (the SSID name should be a 8-character alphanumeric, e.g. "u34k5l166"; the password is usually `12345678`).
+2. Connect to the unit's own WiFi network: a short alphanumeric name, on many units the last digits of its MAC address; the password is usually `12345678`.
 3. Send your network's credentials:
 
 ```javascript
-const {confirmed} = await Gree.Client.configureWifi({ssid: 'YOUR_WIFI_SSID', password: 'YOUR_WIFI_PASSWORD'});
+Gree.Client.configureWifi({ssid: 'YOUR_WIFI_SSID', password: 'YOUR_WIFI_PASSWORD'})
+    .then(({confirmed}) => console.log(confirmed ? 'joined' : 'no confirmation'));
 ```
 
 `confirmed` is `false` when the unit sent no confirmation, which some firmwares
@@ -248,6 +296,8 @@ packet can be sent with netcat:
 echo -n "{\"psw\": \"YOUR_WIFI_PASSWORD\",\"ssid\": \"YOUR_WIFI_SSID\",\"t\": \"wlan\"}" | nc -cu 192.168.1.1 7000
 ```
 
+(`nc` options differ between netcat variants; `-c` is the BSD/macOS one.)
+
 ## API Reference
 ## Classes
 
@@ -256,7 +306,8 @@ echo -n "{\"psw\": \"YOUR_WIFI_PASSWORD\",\"ssid\": \"YOUR_WIFI_SSID\",\"t\": \"
 <dd><p>Control GREE HVAC device by getting and setting its properties</p>
 </dd>
 <dt><a href="#ClientError">ClientError</a> ⇐ <code>Error</code></dt>
-<dd></dd>
+<dd><p>Base class of every error the client emits or rejects with</p>
+</dd>
 <dt><a href="#ClientSocketSendError">ClientSocketSendError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
 <dd><p>Connectivity problems while communicating with HVAC</p>
 </dd>
@@ -267,16 +318,18 @@ echo -n "{\"psw\": \"YOUR_WIFI_PASSWORD\",\"ssid\": \"YOUR_WIFI_SSID\",\"t\": \"
 <dd><p>The message received from HVAC cannot be parsed</p>
 </dd>
 <dt><a href="#ClientMessageUnpackError">ClientMessageUnpackError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
-<dd><p>The package from the message received from HVAC cannot be decrypt</p>
+<dd><p>The package from the message received from HVAC cannot be decrypted</p>
 </dd>
 <dt><a href="#ClientUnknownMessageError">ClientUnknownMessageError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
 <dd><p>A message having an unknown format was received from HVAC</p>
 </dd>
 <dt><a href="#ClientNotConnectedError">ClientNotConnectedError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
-<dd><p>Request operations on not connected to the HVAC client</p>
+<dd><p>The client is not connected to the HVAC (yet), or was disconnected</p>
 </dd>
 <dt><a href="#ClientConnectTimeoutError">ClientConnectTimeoutError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
-<dd></dd>
+<dd><p>A connect attempt got no scan or bind answer within <code>connectTimeout</code>; the
+client keeps retrying</p>
+</dd>
 <dt><a href="#ClientCancelConnectError">ClientCancelConnectError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
 <dd><p>Connecting was cancelled by calling disconnect</p>
 </dd>
@@ -322,12 +375,12 @@ Control GREE HVAC device by getting and setting its properties
 
 **Kind**: global class  
 **Extends**: <code>EventEmitter</code>  
-**Emits**: [<code>connect</code>](#Client+event_connect), [<code>update</code>](#Client+event_update), [<code>error</code>](#Client+event_error), [<code>disconnect</code>](#Client+event_disconnect)  
+**Emits**: [<code>connect</code>](#Client+event_connect), [<code>update</code>](#Client+event_update), [<code>success</code>](#Client+event_success), [<code>no\_response</code>](#Client+event_no_response), [<code>error</code>](#Client+event_error), [<code>disconnect</code>](#Client+event_disconnect)  
 
 * [Client](#Client) ⇐ <code>EventEmitter</code>
     * [new Client(options)](#new_Client_new)
     * _instance_
-        * [.connect()](#Client+connect) ⇒ <code>Promise</code>
+        * [.connect()](#Client+connect) ⇒ [<code>Promise.&lt;Client&gt;</code>](#Client)
         * [.disconnect()](#Client+disconnect) ⇒ <code>Promise</code>
         * [.setProperties(properties)](#Client+setProperties) ⇒ <code>Promise</code>
         * [.setProperty(property, value)](#Client+setProperty) ⇒ <code>Promise</code>
@@ -341,10 +394,10 @@ Control GREE HVAC device by getting and setting its properties
         * [.getSubUnits([options])](#Client+getSubUnits) ⇒ <code>Promise.&lt;Array.&lt;SubUnit&gt;&gt;</code>
         * [.getDeviceId()](#Client+getDeviceId) ⇒ <code>string</code> \| <code>null</code>
         * ~~[.setDebug(enable)](#Client+setDebug)~~
-        * ["connect"](#Client+event_connect)
+        * ["connect" (client)](#Client+event_connect)
         * ["no_response" (client)](#Client+event_no_response)
-        * ["success" (updated, properties)](#Client+event_success)
-        * ["update" (updated, properties)](#Client+event_update)
+        * ["success" (updated, properties, client)](#Client+event_success)
+        * ["update" (updated, properties, client)](#Client+event_update)
         * ["error" (error)](#Client+event_error)
         * ["disconnect"](#Client+event_disconnect)
     * _static_
@@ -373,10 +426,11 @@ client.on('connect', () => {
 ```
 <a name="Client+connect"></a>
 
-### client.connect() ⇒ <code>Promise</code>
+### client.connect() ⇒ [<code>Promise.&lt;Client&gt;</code>](#Client)
 Connect to a HVAC device and start polling status changes by default
 
 **Kind**: instance method of [<code>Client</code>](#Client)  
+**Returns**: [<code>Promise.&lt;Client&gt;</code>](#Client) - resolves once bound  
 **Emits**: [<code>connect</code>](#Client+event_connect), [<code>error</code>](#Client+event_error)  
 <a name="Client+disconnect"></a>
 
@@ -606,11 +660,16 @@ Use the client `logLevel` option instead
 
 <a name="Client+event_connect"></a>
 
-### "connect"
+### "connect" (client)
 Emitted when successfully connected to the HVAC, and again after every
 automatic re-bind (see the `maxNoResponse` option)
 
 **Kind**: event emitted by [<code>Client</code>](#Client)  
+
+| Param | Type |
+| --- | --- |
+| client | [<code>Client</code>](#Client) | 
+
 <a name="Client+event_no_response"></a>
 
 ### "no_response" (client)
@@ -625,7 +684,7 @@ Emitted when the HVAC did not answer a status request within
 
 <a name="Client+event_success"></a>
 
-### "success" (updated, properties)
+### "success" (updated, properties, client)
 Emitted when properties successfully updated after calling setProperties or setProperty
 
 **Kind**: event emitted by [<code>Client</code>](#Client)  
@@ -634,10 +693,11 @@ Emitted when properties successfully updated after calling setProperties or setP
 | --- | --- | --- |
 | updated | [<code>PropertyMap</code>](#PropertyMap) | The properties and their values that were updated |
 | properties | [<code>PropertyMap</code>](#PropertyMap) | All the properties and their values managed by the Client |
+| client | [<code>Client</code>](#Client) |  |
 
 <a name="Client+event_update"></a>
 
-### "update" (updated, properties)
+### "update" (updated, properties, client)
 Emitted when properties successfully updated from HVAC (e.g. by a remote control)
 
 **Kind**: event emitted by [<code>Client</code>](#Client)  
@@ -646,6 +706,7 @@ Emitted when properties successfully updated from HVAC (e.g. by a remote control
 | --- | --- | --- |
 | updated | [<code>PropertyMap</code>](#PropertyMap) | The properties and their values that were updated |
 | properties | [<code>PropertyMap</code>](#PropertyMap) | All the properties and their values managed by the Client |
+| client | [<code>Client</code>](#Client) |  |
 
 <a name="Client+event_error"></a>
 
@@ -687,7 +748,7 @@ device that answers within `timeout`. Opens its own socket, so no client
 **Example**  
 ```js
 const devices = await Gree.Client.discover({host: '192.168.1.255'});
-// [{mac: 'f4911e000001', name: '1e000001', address: '192.168.1.42', version: 'V1.1.13', pack: {...}}]
+// [{mac: 'f4911e000001', name: '1e000001', address: '192.168.1.42', version: 'V1.1.13', subUnits: 0, pack: {...}}]
 
 const client = new Gree.Client({host: devices[0].address});
 ```
@@ -697,7 +758,7 @@ const client = new Gree.Client({host: devices[0].address});
 Connect a unit in AP (setup) mode to your WiFi network, without the
 vendor app. Reset the unit's WiFi first (MODE + WIFI, or MODE + TURBO,
 on the remote for 5 s), join the unit's own WiFi network (named after
-the last digits of its MAC, password usually `12345678`), then call
+the last digits of its MAC on many units, password usually `12345678`), then call
 this. The unit gets a new device key, so a client bound before re-binds.
 
 **Kind**: static method of [<code>Client</code>](#Client)  
@@ -720,6 +781,8 @@ await Gree.Client.configureWifi({ssid: 'home', password: 'secret'});
 <a name="ClientError"></a>
 
 ## ClientError ⇐ <code>Error</code>
+Base class of every error the client emits or rejects with
+
 **Kind**: global class  
 **Extends**: <code>Error</code>  
 <a name="new_ClientError_new"></a>
@@ -781,7 +844,7 @@ The message received from HVAC cannot be parsed
 <a name="ClientMessageUnpackError"></a>
 
 ## ClientMessageUnpackError ⇐ [<code>ClientError</code>](#ClientError)
-The package from the message received from HVAC cannot be decrypt
+The package from the message received from HVAC cannot be decrypted
 
 **Kind**: global class  
 **Extends**: [<code>ClientError</code>](#ClientError)  
@@ -812,13 +875,16 @@ A message having an unknown format was received from HVAC
 <a name="ClientNotConnectedError"></a>
 
 ## ClientNotConnectedError ⇐ [<code>ClientError</code>](#ClientError)
-Request operations on not connected to the HVAC client
+The client is not connected to the HVAC (yet), or was disconnected
 
 **Kind**: global class  
 **Extends**: [<code>ClientError</code>](#ClientError)  
 <a name="ClientConnectTimeoutError"></a>
 
 ## ClientConnectTimeoutError ⇐ [<code>ClientError</code>](#ClientError)
+A connect attempt got no scan or bind answer within `connectTimeout`; the
+client keeps retrying
+
 **Kind**: global class  
 **Extends**: [<code>ClientError</code>](#ClientError)  
 <a name="ClientCancelConnectError"></a>
@@ -879,6 +945,7 @@ Device properties value constants
 | power.on | <code>string</code> |  |
 | power.off | <code>string</code> |  |
 | mode.auto | <code>string</code> |  |
+| mode.cool | <code>string</code> |  |
 | mode.dry | <code>string</code> |  |
 | mode.fan_only | <code>string</code> |  |
 | mode.heat | <code>string</code> |  |
@@ -958,9 +1025,9 @@ Device properties constants
 | --- | --- | --- |
 | power | <code>string</code> | Power state of the device |
 | mode | <code>string</code> | Mode of operation |
-| temperatureUnit | <code>string</code> | Temperature unit (must be together with set temperature) |
-| temperature | <code>string</code> | Set temperature (must be together with temperature unit) |
-| currentTemperature | <code>string</code> | Get current temperature from the internal (?) sensor (This value can not be set, only received. HVAC must support this feature otherwise the value is 0) |
+| temperatureUnit | <code>string</code> | Temperature unit of `temperature` and of the unit's display |
+| temperature | <code>string</code> | Target setpoint in `temperatureUnit` (the unit's current one unless set in the same call): whole °F, whole °C, or half °C with the `halfDegree` option |
+| currentTemperature | <code>string</code> | Get the indoor temperature sensor in °C (read-only; `0` when the unit has no such sensor) |
 | fanSpeed | <code>string</code> | Fan speed |
 | air | <code>string</code> | Fresh air valve |
 | blow | <code>string</code> | Keeps the fan running for a while after shutting down (also called "X-Fan", only usable in Dry and Cool mode) |
@@ -1000,7 +1067,7 @@ A device that answered a discovery scan
 | mac | <code>string</code> | Device MAC-address (`cid`), usable as the `mac` client option |
 | name | <code>string</code> | Device name as configured in the vendor app |
 | address | <code>string</code> | IP-address the device answered from, usable as the `host` client option |
-| [version] | <code>string</code> | Firmware version, e.g. `V1.1.13` |
+| [version] | <code>string</code> | WiFi module version, e.g. `V1.1.13` (`getDeviceInfo()` has the firmware id) |
 | subUnits | <code>number</code> | Number of indoor units behind it when it is the WiFi module of a multi-split outdoor unit, else `0` (list them with `getSubUnits()`) |
 | pack | <code>object</code> | The full decrypted scan answer (brand, model, ...) |
 
@@ -1050,7 +1117,7 @@ See [`.env.example`](.env.example) for the full list and defaults.
 ```bash
 git clone https://github.com/apachler/gree-hvac-client.git
 cd gree-hvac-client
-npm install        # also installs the git hook (pre-push lint)
+npm install        # also installs the git hooks (pre-push lint, commit-msg check)
 npm test           # Jest unit tests
 npm run lint       # ESLint + Prettier
 npm run typecheck  # check index.d.ts against the source

@@ -6,9 +6,9 @@
  * @readonly
  * @property {string} power - Power state of the device
  * @property {string} mode - Mode of operation
- * @property {string} temperatureUnit - Temperature unit (must be together with set temperature)
- * @property {string} temperature - Set temperature (must be together with temperature unit)
- * @property {string} currentTemperature - Get current temperature from the internal (?) sensor (This value can not be set, only received. HVAC must support this feature otherwise the value is 0)
+ * @property {string} temperatureUnit - Temperature unit of `temperature` and of the unit's display
+ * @property {string} temperature - Target setpoint in `temperatureUnit` (the unit's current one unless set in the same call): whole °F, whole °C, or half °C with the `halfDegree` option
+ * @property {string} currentTemperature - Get the indoor temperature sensor in °C (read-only; `0` when the unit has no such sensor)
  * @property {string} fanSpeed - Fan speed
  * @property {string} air - Fresh air valve
  * @property {string} blow - Keeps the fan running for a while after shutting down (also called "X-Fan", only usable in Dry and Cool mode)
