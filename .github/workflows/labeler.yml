@@ -16,6 +16,10 @@ jobs:
   label:
     runs-on: ubuntu-latest
     steps:
+      - name: Harden the runner (audit outbound connections)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
       - name: Apply label from PR title
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:

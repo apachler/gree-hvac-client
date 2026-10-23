@@ -181,6 +181,8 @@ export interface ClientOptions {
      * humidity control do, e.g. Airy Pro (false; dehumidifiers send plain %)
      */
     encodedTargetHumidity: boolean;
+    /** Least time between two set requests, 0 disables it (100 ms) */
+    commandInterval: number;
     /** Ask the unit not to beep on commands (false) */
     silent: boolean;
     /** Logging level ('error') */
@@ -279,6 +281,8 @@ export declare class ClientConnectTimeoutError extends ClientError {}
 export declare class ClientCancelConnectError extends ClientError {}
 /** The HVAC did not answer a status request within `pollingTimeout` */
 export declare class ClientNoResponseError extends ClientError {}
+/** An unknown or read-only property, or a value the unit does not take */
+export declare class ClientInvalidPropertyError extends ClientError {}
 
 export interface ClientEvents {
     connect: [client: Client];

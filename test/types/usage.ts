@@ -3,6 +3,7 @@
 
 import {
     Client,
+    ClientInvalidPropertyError,
     ClientNoResponseError,
     PROPERTY,
     VALUE,
@@ -52,6 +53,9 @@ void (async () => {
         const outdoor: number | undefined = properties.outdoorTemperature;
         void outdoor;
     } catch (error) {
+        if (error instanceof ClientInvalidPropertyError) {
+            void error.props;
+        }
         if (error instanceof ClientNoResponseError) {
             void error.message;
         }

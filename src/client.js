@@ -2,7 +2,6 @@
 
 const dgram = require('dgram');
 const EventEmitter = require('events');
-const clone = require('clone');
 
 const { EncryptionService } = require('./encryption-service');
 const { PROPERTY } = require('./property');
@@ -317,6 +316,30 @@ class Client extends EventEmitter {
          * @private
          */
         this._statusTimeoutRef = null;
+
+        /**
+         * Command spacing timer reference (see _sendCommand)
+         *
+         * @type {number|null}
+         * @private
+         */
+        this._commandTimerRef = null;
+
+        /**
+         * Commands waiting for their turn, oldest first
+         *
+         * @type {Array<object>}
+         * @private
+         */
+        this._commandQueue = [];
+
+        /**
+         * When the last command went out (ms since epoch)
+         *
+         * @type {number}
+         * @private
+         */
+        this._lastCommandAt = 0;
 
         /**
          * Device properties, are updated by polling the devices
@@ -755,7 +778,14 @@ class Client extends EventEmitter {
         this._clearTimer('_socketTimeoutRef');
         this._clearTimer('_statusTimeoutRef');
         this._clearTimer('_bindTimeoutRef');
+        this._clearTimer('_commandTimerRef');
         this._settleSubList(null);
+
+        const commands = this._commandQueue;
+        this._commandQueue = [];
+        commands.forEach(command =>
+            command.reject(new ClientNotConnectedError())
+        );
 
         const requests = this._statusRequests;
         this._statusRequests = [];
@@ -807,7 +837,7 @@ class Client extends EventEmitter {
         }
 
         this._logger.info('Update request');
-        return this._sendRequest({
+        return this._sendCommand({
             opt: Object.keys(vendorProperties),
             p: Object.values(vendorProperties),
             t: 'cmd',
@@ -897,7 +927,7 @@ class Client extends EventEmitter {
      */
     setVendorProperties(properties) {
         this._logger.info('Vendor update request');
-        return this._sendRequest({
+        return this._sendCommand({
             opt: Object.keys(properties),
             p: Object.values(properties),
             t: 'cmd',
@@ -993,7 +1023,7 @@ class Client extends EventEmitter {
             `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
             `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
         this._logger.info('Clock update request', { time });
-        return this._sendRequest({
+        return this._sendCommand({
             opt: ['time'],
             p: [time],
             t: 'cmd',
@@ -1328,6 +1358,47 @@ class Client extends EventEmitter {
     }
 
     /**
+     * Send a `cmd`, at least `commandInterval` ms after the previous one:
+     * units are reported to stall when flooded with commands
+     * (tomikaa87/gree-remote#70)
+     *
+     * @param {object} message
+     * @returns {Promise} resolves once sent
+     * @private
+     */
+    _sendCommand(message) {
+        return new Promise((resolve, reject) => {
+            this._commandQueue.push({ message, resolve, reject });
+            this._drainCommands();
+        });
+    }
+
+    /**
+     * Send the next queued command if its turn has come, else arm the timer
+     *
+     * @private
+     */
+    _drainCommands() {
+        if (this._commandTimerRef || this._commandQueue.length === 0) {
+            return;
+        }
+        const wait =
+            this._lastCommandAt + this._options.commandInterval - Date.now();
+        if (wait > 0) {
+            this._commandTimerRef = setTimeout(() => {
+                this._commandTimerRef = null;
+                this._drainCommands();
+            }, wait);
+            return;
+        }
+
+        const { message, resolve, reject } = this._commandQueue.shift();
+        this._lastCommandAt = Date.now();
+        this._sendRequest(message).then(resolve, reject);
+        this._drainCommands();
+    }
+
+    /**
      * Send properties status request to device
      *
      * @private
@@ -1457,6 +1528,20 @@ class Client extends EventEmitter {
      * @private
      */
     async _handleResponse(buffer, rinfo) {
+        // Once bound, only the unit itself has anything to say: drop what
+        // other hosts send (the protocol has no other sender check)
+        if (
+            this._bound &&
+            rinfo?.address &&
+            this._deviceAddress &&
+            rinfo.address !== this._deviceAddress
+        ) {
+            this._logger.debug('Message from another host, ignoring', {
+                address: rinfo.address,
+            });
+            return;
+        }
+
         const message = this._parse(buffer);
 
         this._logger.debug('Handle response', { request: message });
@@ -1763,7 +1848,8 @@ class Client extends EventEmitter {
             return;
         }
 
-        const oldProperties = clone(this._properties);
+        // the diff below compares top-level values only: a shallow copy does
+        const oldProperties = { ...this._properties };
         const newProperties = {};
         pack.cols.forEach((col, i) => {
             // a cut-short answer may carry a column without a name; a

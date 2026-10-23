@@ -42,6 +42,7 @@ check with no dependencies and also honours `GREE_SKIP_LINT=1`.
 npm run lint          # ESLint + Prettier
 npm run lint:fix      # auto-fix
 npm run typecheck     # check the hand-written index.d.ts against the source
+npm run lint:lockfile # every lockfile entry from registry.npmjs.org over HTTPS
 npm test              # Jest unit tests
 npm run test:coverage # Jest with a coverage summary
 npm run docs          # regenerate README.md from README.hbs (jsdoc2md)

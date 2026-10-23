@@ -13,6 +13,7 @@ describe('Client options', () => {
             {
               "autoConnect": true,
               "bindTimeout": 1000,
+              "commandInterval": 100,
               "connectTimeout": 3000,
               "debug": false,
               "encodedTargetHumidity": false,

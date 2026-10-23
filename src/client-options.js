@@ -20,6 +20,7 @@
  * @property {number} statusBatchSize=20 - Most vendor codes asked for in one status request; more are split over several requests (some firmwares stop answering above ~29 codes or ~800 bytes)
  * @property {boolean} halfDegree=false - Celsius setpoints in half degrees (e.g. 23.5), for firmwares that carry the half degree in `Add0.5`. Leave off unless your unit shows half degrees: other firmwares ignore it.
  * @property {boolean} encodedTargetHumidity=false - The unit sends `targetHumidity` encoded as (% − 15) / 5, as air conditioners with humidity control do (e.g. Airy Pro); leave off for dehumidifiers
+ * @property {number} commandInterval=100 - Least time between two set requests (ms); faster ones are queued, as units are reported to stall when flooded. `0` disables it.
  * @property {boolean} silent=false - Ask the unit not to beep when it receives a command (sends the `Buzzer_ON_OFF`/`BuzzerCtrl` flags with every set request; units without a controllable beeper ignore them)
  * @property {string} logLevel=error - Logging level (debug, info, warn, error)
  * @property {boolean} debug=false - Override logLevel to debug, deprecated, use logLevel option
@@ -40,6 +41,7 @@ const CLIENT_OPTIONS = {
     statusBatchSize: 20,
     halfDegree: false,
     encodedTargetHumidity: false,
+    commandInterval: 100,
     silent: false,
     logLevel: 'error',
     debug: false,
@@ -66,6 +68,7 @@ const ENV_OPTIONS = {
     statusBatchSize: 'GREE_HVAC_STATUS_BATCH_SIZE',
     halfDegree: 'GREE_HVAC_HALF_DEGREE',
     encodedTargetHumidity: 'GREE_HVAC_ENCODED_TARGET_HUMIDITY',
+    commandInterval: 'GREE_HVAC_COMMAND_INTERVAL',
     silent: 'GREE_HVAC_SILENT',
     logLevel: 'GREE_HVAC_LOG_LEVEL',
     debug: 'GREE_HVAC_DEBUG',

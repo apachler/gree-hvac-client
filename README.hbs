@@ -226,6 +226,12 @@ client.on('error', error => console.error(error.message));
 | **humidityMode** | _off_, _target_, _continuous_, _smart_ | Humidity control of air conditioners that have it; _continuous_ only in Dry, _smart_ only in Cool mode (optional) |
 | **lightSensor** | _off_, _on_ | Display brightness follows the room light; turning it on also turns the `lights` on (optional) |
 
+Values are checked before anything is sent: an unknown or read-only property,
+a value a property doesn't have, or a setpoint no unit takes is rejected with
+`ClientInvalidPropertyError`. Numeric strings (`'24'`) are taken as numbers.
+Commands are spaced at least `commandInterval` (100 ms) apart, as units are
+reported to stall when flooded.
+
 _Optional_ properties exist only on some units: the client probes for them
 after connecting and only reports the ones the unit answers. To stop the unit
 beeping on every command, use the `silent` option. For half-degree °C
@@ -323,6 +329,7 @@ npm install        # also installs the git hooks (pre-push lint, commit-msg chec
 npm test           # Jest unit tests
 npm run lint       # ESLint + Prettier
 npm run typecheck  # check index.d.ts against the source
+npm run lint:lockfile  # every package from registry.npmjs.org over HTTPS
 npm run docs       # regenerate README.md from README.hbs
 ```
 

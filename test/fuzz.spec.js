@@ -197,7 +197,7 @@ describe('Fuzzing', () => {
 
             const half = new PropertyTransformer({ halfDegree: true });
             fc.assert(
-                fc.property(fc.integer({ min: 0, max: 80 }), n => {
+                fc.property(fc.integer({ min: 16, max: 80 }), n => {
                     const celsius = n / 2;
                     expect(
                         half.fromVendor(half.toVendor({ temperature: celsius }))

@@ -148,8 +148,27 @@ class ClientNoResponseError extends ClientError {
     }
 }
 
+/**
+ * A property or value the client refuses to send: an unknown or read-only
+ * property, a value that is not one of the property's values, or a number out
+ * of range
+ *
+ * @class
+ * @augments ClientError
+ */
+class ClientInvalidPropertyError extends ClientError {
+    /**
+     * @param {string} message
+     * @param {Object<string, unknown>} props `property` and `value`
+     */
+    constructor(message, props) {
+        super(message, undefined, props);
+    }
+}
+
 module.exports = {
     ClientError,
+    ClientInvalidPropertyError,
     ClientNotConnectedError,
     ClientConnectTimeoutError,
     ClientCancelConnectError,

@@ -226,6 +226,12 @@ client.on('error', error => console.error(error.message));
 | **humidityMode** | _off_, _target_, _continuous_, _smart_ | Humidity control of air conditioners that have it; _continuous_ only in Dry, _smart_ only in Cool mode (optional) |
 | **lightSensor** | _off_, _on_ | Display brightness follows the room light; turning it on also turns the `lights` on (optional) |
 
+Values are checked before anything is sent: an unknown or read-only property,
+a value a property doesn't have, or a setpoint no unit takes is rejected with
+`ClientInvalidPropertyError`. Numeric strings (`'24'`) are taken as numbers.
+Commands are spaced at least `commandInterval` (100 ms) apart, as units are
+reported to stall when flooded.
+
 _Optional_ properties exist only on some units: the client probes for them
 after connecting and only reports the ones the unit answers. To stop the unit
 beeping on every command, use the `silent` option. For half-degree °C
@@ -343,6 +349,11 @@ client keeps retrying</p>
 </dd>
 <dt><a href="#ClientNoResponseError">ClientNoResponseError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
 <dd><p>The HVAC did not answer a status request within <code>pollingTimeout</code></p>
+</dd>
+<dt><a href="#ClientInvalidPropertyError">ClientInvalidPropertyError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
+<dd><p>A property or value the client refuses to send: an unknown or read-only
+property, a value that is not one of the property&#39;s values, or a number out
+of range</p>
 </dd>
 </dl>
 
@@ -909,6 +920,24 @@ The HVAC did not answer a status request within `pollingTimeout`
 
 **Kind**: global class  
 **Extends**: [<code>ClientError</code>](#ClientError)  
+<a name="ClientInvalidPropertyError"></a>
+
+## ClientInvalidPropertyError ⇐ [<code>ClientError</code>](#ClientError)
+A property or value the client refuses to send: an unknown or read-only
+property, a value that is not one of the property's values, or a number out
+of range
+
+**Kind**: global class  
+**Extends**: [<code>ClientError</code>](#ClientError)  
+<a name="new_ClientInvalidPropertyError_new"></a>
+
+### new ClientInvalidPropertyError(message, props)
+
+| Param | Type | Description |
+| --- | --- | --- |
+| message | <code>string</code> |  |
+| props | <code>Object.&lt;string, unknown&gt;</code> | `property` and `value` |
+
 <a name="CLIENT_OPTIONS"></a>
 
 ## CLIENT\_OPTIONS : <code>object</code>
@@ -935,6 +964,7 @@ Client options
 | statusBatchSize | <code>number</code> | <code>20</code> | Most vendor codes asked for in one status request; more are split over several requests (some firmwares stop answering above ~29 codes or ~800 bytes) |
 | halfDegree | <code>boolean</code> | <code>false</code> | Celsius setpoints in half degrees (e.g. 23.5), for firmwares that carry the half degree in `Add0.5`. Leave off unless your unit shows half degrees: other firmwares ignore it. |
 | encodedTargetHumidity | <code>boolean</code> | <code>false</code> | The unit sends `targetHumidity` encoded as (% − 15) / 5, as air conditioners with humidity control do (e.g. Airy Pro); leave off for dehumidifiers |
+| commandInterval | <code>number</code> | <code>100</code> | Least time between two set requests (ms); faster ones are queued, as units are reported to stall when flooded. `0` disables it. |
 | silent | <code>boolean</code> | <code>false</code> | Ask the unit not to beep when it receives a command (sends the `Buzzer_ON_OFF`/`BuzzerCtrl` flags with every set request; units without a controllable beeper ignore them) |
 | logLevel | <code>string</code> | <code>&quot;error&quot;</code> | Logging level (debug, info, warn, error) |
 | debug | <code>boolean</code> | <code>false</code> | Override logLevel to debug, deprecated, use logLevel option |
@@ -1129,6 +1159,7 @@ npm install        # also installs the git hooks (pre-push lint, commit-msg chec
 npm test           # Jest unit tests
 npm run lint       # ESLint + Prettier
 npm run typecheck  # check index.d.ts against the source
+npm run lint:lockfile  # every package from registry.npmjs.org over HTTPS
 npm run docs       # regenerate README.md from README.hbs
 ```
 

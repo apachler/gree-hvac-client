@@ -47,6 +47,7 @@ npm run test:coverage  # Jest with coverage summary
 npm run lint           # ESLint + Prettier
 npm run lint:fix       # auto-fix
 npm run typecheck      # tsc: index.d.ts vs. the source
+npm run lint:lockfile  # lockfile-lint: registry host, HTTPS, package names
 npm run docs           # regenerate README.md from README.hbs + JSDoc (scripts/docs.js)
 npm run audit          # npm audit on prod deps, fail on HIGH/CRITICAL
 
@@ -81,7 +82,10 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   **Always attach an `error` handler** — an unhandled `error` event terminates
   the process (Node EventEmitter semantics).
 - `setProperty` / `setProperties` take friendly `PROPERTY` keys and `VALUE`
-  enums; `PropertyTransformer` maps them to/from the vendor wire names. It is
+  enums (or their raw vendor numbers; numeric strings become numbers). Anything
+  else — unknown/read-only properties, other values, out-of-range setpoints —
+  throws `ClientInvalidPropertyError` before anything is sent.
+  `PropertyTransformer` maps them to/from the vendor wire names. It is
   built with the client options (`halfDegree`, `encodedTargetHumidity` change
   the encoding) and `toVendor`/`fromVendor` take the current vendor properties
   as `state`: a °F `temperature` is `SetTem` (°C) + `TemRec`, a half °C one
@@ -92,7 +96,11 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
 - `Client.discover()` and `Client.configureWifi()` are static and open their
   own socket (no bind).
 - `getSubUnits()` keeps one pending `subList` request in `_subListRequest`
-  (its timer is not one of the four refs below; `_dispose()` settles it).
+  (its timer is not one of the timer refs below; `_dispose()` settles it).
+- Every `cmd` goes through `_sendCommand()`, which keeps `commandInterval` ms
+  between commands (queue + `_commandTimerRef`). Specs that send several
+  commands in a row with fake timers must advance the clock or set
+  `commandInterval: 0`.
 - Multi-split (`subUnit` option): envelope gets `tcid:<gateway cid>`, status
   packs name the indoor unit in `mac`, cmd packs in `sub`. Unverified on
   hardware — see docs/PROTOCOL.md.
@@ -122,6 +130,10 @@ batches, and the status timeout clears (and `getProperties()` waiters resolve)
 only once every batch is answered. Query timers live on the request;
 `_dispose()` clears them and rejects the queries.
 
+Once bound, `_handleResponse` drops messages from any address but the unit's
+(`_deviceAddress`). Logs pass through a redacting format in `logger.js`:
+fields named `key`, `psw` or `password` never reach the output.
+
 ## Connection lifecycle (`client.js` + `encryption-service.js`)
 
 - `_initialize()` starts every (re)connect: fresh `EncryptionService`, scan to
@@ -136,9 +148,9 @@ only once every batch is answered. Query timers live on the request;
   works active — so a GCM scan reply means a GCM bind on attempt 1. Once
   bound, late generic-key `dev`/`bindok` replies are dropped via
   `decryptGeneric`, not reported as errors.
-- Four timer refs (`_socketTimeoutRef`, `_bindTimeoutRef`, `_statusIntervalRef`,
-  `_statusTimeoutRef`): set them only after `_clearTimer()`, and `_dispose()`
-  clears all. Overwriting a ref strands a timer `disconnect()` can't reach.
+- Five timer refs (`_socketTimeoutRef`, `_bindTimeoutRef`, `_statusIntervalRef`,
+  `_statusTimeoutRef`, `_commandTimerRef`): set them only after `_clearTimer()`,
+  and `_dispose()` clears all (and rejects queued commands). Overwriting a ref strands a timer `disconnect()` can't reach.
 - `disconnect()` can race any `await`: re-check `this._socket` after awaits.
   Promises started from timers or the message handler must be caught and
   emitted as `error` — an unhandled rejection kills the host process.
@@ -222,3 +234,7 @@ Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git re
 - jsdoc's type parser rejects TypeScript-only syntax such as optional members
   (`{{a?: string}}`): use `{object}` and describe the fields. `npm run docs`
   (`scripts/docs.js`) then fails and leaves `README.md` untouched.
+- CI installs with `npm ci --ignore-scripts` (no dependency install scripts)
+  and every job starts with `step-security/harden-runner` in audit mode: its
+  run summary lists the outbound connections. A new dev dependency that
+  needs an install script will break CI — check first.

@@ -11,7 +11,8 @@
     "test:coverage": "jest --coverage",
     "docs": "node scripts/docs.js",
     "audit": "npm audit --omit=dev --audit-level=high",
-    "semantic-release": "semantic-release"
+    "semantic-release": "semantic-release",
+    "lint:lockfile": "lockfile-lint --path package-lock.json --type npm --allowed-hosts npm --validate-https --validate-package-names --allowed-package-name-aliases wrap-ansi-cjs:wrap-ansi strip-ansi-cjs:strip-ansi string-width-cjs:string-width @jest/react-is-18:react-is @jest/react-is-19:react-is"
   },
   "types": "index.d.ts",
   "files": [
@@ -38,7 +39,6 @@
   ],
   "license": "GPL-3.0-only",
   "dependencies": {
-    "clone": "^2.1.2",
     "winston": "^3.17.0"
   },
   "engines": {
@@ -58,6 +58,7 @@
     "globals": "^17.11.0",
     "jest": "^30.4.2",
     "jsdoc-to-markdown": "^9.1.3",
+    "lockfile-lint": "^4.14.1",
     "prettier": "^3.8.3",
     "semantic-release": "^25.0.9",
     "typescript": "^5.9.3"

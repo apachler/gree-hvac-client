@@ -1,6 +1,7 @@
 'use strict';
 
 const PROPERTY_VENDOR_VALUE = require('./property-vendor-value').PROPERTY_VALUE;
+const { ClientInvalidPropertyError } = require('./errors');
 const PROPERTY_VENDOR_CODES = {
     power: 'Pow',
     mode: 'Mod',
@@ -206,9 +207,48 @@ const own = (object, key) =>
 const readOnly = (property, fromVendor = value => value) => ({
     fromVendor,
     toVendor: function () {
-        throw new Error(`Cannot set read-only property ${property}`);
+        throw new ClientInvalidPropertyError(
+            `Cannot set read-only property ${property}`,
+            { property }
+        );
     },
 });
+
+/**
+ * Accepted setpoints. Units take 16–30 °C (61–86 °F); the bounds are wider so
+ * only values no unit takes are refused, not a model's own limits.
+ *
+ * @private
+ */
+const SETPOINT_RANGE = {
+    celsius: { min: 8, max: MAX_CELSIUS_SETPOINT },
+    fahrenheit: { min: 46, max: 104 },
+};
+
+/**
+ * A numeric property given as a numeric string (as UIs and MQTT payloads
+ * often send it) becomes a number; anything else is left for _validate.
+ *
+ * @param {string} property
+ * @param {unknown} value
+ * @param {object} values the value maps
+ * @returns {unknown}
+ * @private
+ */
+const toNumber = (property, value, values) => {
+    const named = Object.keys(own(values, property) || {}).length > 0;
+    if (!named && typeof value === 'string' && value.trim() !== '') {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : value;
+    }
+    return value;
+};
+
+const invalid = (property, value, expected) =>
+    new ClientInvalidPropertyError(
+        `Invalid value ${JSON.stringify(value)} for ${property}, expected ${expected}`,
+        { property, value }
+    );
 
 const PROPERTY_VALUE_TRANSFORMERS = {
     currentTemperature: readOnly(
@@ -314,11 +354,16 @@ class PropertyTransformer {
      */
     toVendor(properties, state = {}) {
         const ret = {};
-        for (const [property, value] of Object.entries(properties)) {
+        for (const [property, input] of Object.entries(properties)) {
+            const value = toNumber(property, input, this._values);
             const code = own(this._properties, property);
             if (code === undefined) {
-                throw new Error(`Unknown property ${property}`);
+                throw new ClientInvalidPropertyError(
+                    `Unknown property ${property}`,
+                    { property, value }
+                );
             }
+            this._validate(property, value);
             const vendorValue = this._valueToVendor(property, value);
             ret[code] = vendorValue;
             const companions = own(PROPERTY_VENDOR_COMPANIONS, property);
@@ -327,6 +372,9 @@ class PropertyTransformer {
                     ret[companion] = vendorValue;
                 }
             }
+        }
+        if ('SetTem' in ret) {
+            this._validateSetpoint(ret.SetTem, this._isFahrenheit(ret, state));
         }
         if ('SetTem' in ret && this._isFahrenheit(ret, state)) {
             Object.assign(ret, encodeFahrenheit(ret.SetTem));
@@ -363,6 +411,59 @@ class PropertyTransformer {
         ].filter(
             code => !OPTIONAL_VENDOR_CODES.includes(code) || supported.has(code)
         );
+    }
+
+    /**
+     * Refuse a value the unit does not take: one that is not among a
+     * property's named values (or their raw vendor numbers), or a non-number
+     * for a numeric property
+     *
+     * @param {string} property
+     * @param {unknown} value
+     * @private
+     */
+    _validate(property, value) {
+        const values = own(this._values, property) || {};
+        const names = Object.keys(values);
+        if (names.length > 0) {
+            const known =
+                (typeof value === 'string' &&
+                    own(values, value) !== undefined) ||
+                (typeof value === 'number' &&
+                    Object.values(values).includes(value));
+            if (!known) {
+                throw invalid(property, value, `one of ${names.join(', ')}`);
+            }
+            return;
+        }
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+            throw invalid(property, value, 'a number');
+        }
+        if (
+            property === 'targetHumidity' &&
+            (!Number.isInteger(value) || value < 0 || value > 100)
+        ) {
+            throw invalid(property, value, 'a whole % from 0 to 100');
+        }
+    }
+
+    /**
+     * @param {number} setpoint
+     * @param {boolean} fahrenheit
+     * @private
+     */
+    _validateSetpoint(setpoint, fahrenheit) {
+        const unit = fahrenheit ? 'fahrenheit' : 'celsius';
+        const { min, max } = SETPOINT_RANGE[unit];
+        const step = !fahrenheit && this._halfDegree ? 0.5 : 1;
+        if (setpoint < min || setpoint > max || (setpoint / step) % 1 !== 0) {
+            const steps = step === 1 ? 'whole' : 'half';
+            throw invalid(
+                'temperature',
+                setpoint,
+                `${steps} degrees ${unit} from ${min} to ${max}`
+            );
+        }
     }
 
     _isFahrenheit(properties, state) {
