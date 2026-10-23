@@ -9,6 +9,16 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    ignore:
+      # @types/node tracks the oldest supported Node (engines.node), so
+      # newer majors would let index.d.ts use APIs Node 18 lacks.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # TypeScript majors need tsconfig changes and a typescript-eslint
+      # release that supports them (eslint-plugin-jsdoc depends on it):
+      # bump by hand.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         dependency-type: "development"
