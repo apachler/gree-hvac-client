@@ -52,9 +52,19 @@ describe('Client', () => {
             });
 
             await assert.rejects(
-                SUT.setProperty('property', 'value'),
+                SUT.setProperty('power', 'on'),
                 ClientNotConnectedError
             );
+        });
+
+        it('should reject an unknown property instead of sending it', async () => {
+            const SUT = new Client({
+                autoConnect: false,
+            });
+
+            await assert.rejects(SUT.setProperty('powr', 'on'), {
+                message: 'Unknown property powr',
+            });
         });
     });
 

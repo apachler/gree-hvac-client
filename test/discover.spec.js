@@ -56,6 +56,7 @@ describe('Client.discover()', () => {
             cid: 'aa:01',
             mac: 'aa:01',
             name: 'living',
+            subCnt: 3,
         };
         const bedroom = {
             ...fixtures.device,
@@ -84,12 +85,14 @@ describe('Client.discover()', () => {
                 name: 'living',
                 address: '10.0.0.11',
                 version: 'V1.1.13',
+                subUnits: 3,
             }),
             expect.objectContaining({
                 mac: 'bb02',
                 name: 'bedroom',
                 address: '10.0.0.12',
                 version: 'V1.1.13',
+                subUnits: 0,
             }),
         ]);
         expect(devices[0].pack.brand).toBe('gree');

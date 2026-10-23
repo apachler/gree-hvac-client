@@ -7,6 +7,7 @@
  * @property {string} power.on
  * @property {string} power.off
  * @property {string} mode.auto
+ * @property {string} mode.cool
  * @property {string} mode.dry
  * @property {string} mode.fan_only
  * @property {string} mode.heat
@@ -62,6 +63,16 @@
  * @property {string} safetyHeating.on
  * @property {string} antiDirectBlow.off
  * @property {string} antiDirectBlow.on
+ * @property {string} waterFull.off
+ * @property {string} waterFull.on
+ * @property {string} cleanFilter.off
+ * @property {string} cleanFilter.on
+ * @property {string} humidityMode.off
+ * @property {string} humidityMode.target - Keep the `targetHumidity`
+ * @property {string} humidityMode.continuous - Dry continuously (dry mode only)
+ * @property {string} humidityMode.smart - Smart dry (cool mode only)
+ * @property {string} lightSensor.off
+ * @property {string} lightSensor.on
  * @private
  */
 const PROPERTY_VALUE = {
@@ -161,6 +172,26 @@ const PROPERTY_VALUE = {
     outdoorTemperature: {},
     humidity: {},
     errorCode: {},
+    targetHumidity: {},
+    waterFull: {
+        off: 0,
+        on: 1,
+    },
+    cleanFilter: {
+        off: 0,
+        on: 1,
+    },
+    humidityMode: {
+        off: 15,
+        target: 0,
+        continuous: 1,
+        smart: 2,
+    },
+    lightSensor: {
+        // LigSen is inverted: 0 means the sensor is active
+        off: 1,
+        on: 0,
+    },
 };
 
 module.exports = {

@@ -13,8 +13,11 @@ describe('Client options', () => {
             {
               "autoConnect": true,
               "bindTimeout": 1000,
+              "commandInterval": 100,
               "connectTimeout": 3000,
               "debug": false,
+              "encodedTargetHumidity": false,
+              "halfDegree": false,
               "host": "1.2.3.4",
               "logLevel": "error",
               "mac": null,
@@ -25,7 +28,27 @@ describe('Client options', () => {
               "port": 1234,
               "reconnectMaxDelay": 30000,
               "silent": false,
+              "statusBatchSize": 20,
+              "subUnit": null,
             }
         `);
+    });
+
+    it('coerces env strings to the type of the default', () => {
+        process.env.GREE_HVAC_PORT = 'not a number';
+        process.env.GREE_HVAC_POLL = 'off';
+        process.env.GREE_HVAC_MAC = 'f4911e000001';
+        try {
+            expect(createOptions({})).toMatchObject({
+                port: 7000,
+                poll: false,
+                mac: 'f4911e000001',
+            });
+        } finally {
+            delete process.env.GREE_HVAC_PORT;
+            delete process.env.GREE_HVAC_POLL;
+            delete process.env.GREE_HVAC_MAC;
+            delete process.env.GREE_HVAC_HOST;
+        }
     });
 });

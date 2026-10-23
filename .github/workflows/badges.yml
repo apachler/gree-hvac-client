@@ -1,0 +1,62 @@
+name: badges
+
+# Publishes the README coverage badge: runs the tests with coverage on every
+# push to master and writes a shields.io endpoint file (coverage.json) to the
+# orphan `badges` branch, which the README badge reads from
+# raw.githubusercontent.com. No third-party coverage service involved.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Read-only: the push to `badges` goes through RELEASE_TOKEN (see release.yml).
+permissions:
+  contents: read
+
+concurrency:
+  group: badges
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (audit outbound connections)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+          cache: "npm"
+      - run: npm ci --ignore-scripts
+      - run: npx jest --coverage --coverageReporters=json-summary
+      - name: Write the badge
+        run: |
+          node -e '
+            const { total } = require("./coverage/coverage-summary.json");
+            const pct = total.lines.pct;
+            const color = pct >= 95 ? "brightgreen" : pct >= 85 ? "green" : pct >= 70 ? "yellow" : "red";
+            const badge = { schemaVersion: 1, label: "coverage", message: `${pct}%`, color };
+            require("fs").mkdirSync("badges", { recursive: true });
+            require("fs").writeFileSync("badges/coverage.json", JSON.stringify(badge) + "\n");
+            console.log(badge);
+          '
+      - name: Publish to the badges branch
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          cd badges
+          git init -q -b badges
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add coverage.json
+          git commit -q -m "chore: coverage badge for ${GITHUB_SHA::7}"
+          git push -q --force "https://x-access-token:${RELEASE_TOKEN}@github.com/${REPO}.git" HEAD:badges

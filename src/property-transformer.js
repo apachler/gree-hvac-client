@@ -1,6 +1,7 @@
 'use strict';
 
 const PROPERTY_VENDOR_VALUE = require('./property-vendor-value').PROPERTY_VALUE;
+const { ClientInvalidPropertyError } = require('./errors');
 const PROPERTY_VENDOR_CODES = {
     power: 'Pow',
     mode: 'Mod',
@@ -23,6 +24,11 @@ const PROPERTY_VENDOR_CODES = {
     outdoorTemperature: 'OutEnvTem',
     humidity: 'DwatSen',
     errorCode: 'AllErr',
+    targetHumidity: 'Dwet',
+    waterFull: 'DwatFul',
+    cleanFilter: 'Dfltr',
+    humidityMode: 'Dmod',
+    lightSensor: 'LigSen',
 };
 
 /**
@@ -38,6 +44,11 @@ const OPTIONAL_VENDOR_CODES = [
     'OutEnvTem',
     'DwatSen',
     'AllErr',
+    'Dwet',
+    'DwatFul',
+    'Dfltr',
+    'Dmod',
+    'LigSen',
 ];
 
 /**
@@ -47,6 +58,14 @@ const OPTIONAL_VENDOR_CODES = [
  * @private
  */
 const EXTRA_STATUS_VENDOR_CODES = ['TemRec'];
+
+/**
+ * Some Celsius firmwares carry a half-degree setpoint in `Add0.5` (opt-in,
+ * see the `halfDegree` client option): `SetTem` 23 + `Add0.5` 1 is 23.5 °C.
+ *
+ * @private
+ */
+const HALF_DEGREE_CODE = 'Add0.5';
 
 /**
  * Some friendly properties map to more than one vendor code that must be
@@ -161,12 +180,75 @@ const decodeFahrenheit = (setTem, temRec) => {
     return Math.round(approx);
 };
 
+/**
+ * Air conditioners with humidity control (e.g. Airy Pro) send the target
+ * humidity as `Dwet` = (% − 15) / 5 instead of a plain percentage
+ * (RobHofmann/HomeAssistant-GreeClimateComponent#473).
+ *
+ * @private
+ */
+const ENCODED_HUMIDITY_TRANSFORMER = {
+    fromVendor: value => value * 5 + 15,
+    toVendor: value => Math.round((value - 15) / 5),
+};
+
+/**
+ * `object[key]` for own properties only: names come from the device and the
+ * caller, and `constructor` or `__proto__` must not resolve to built-ins.
+ *
+ * @param {object} object
+ * @param {string} key
+ * @returns {unknown} the value, or undefined when not an own property
+ * @private
+ */
+const own = (object, key) =>
+    Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined;
+
 const readOnly = (property, fromVendor = value => value) => ({
     fromVendor,
     toVendor: function () {
-        throw new Error(`Cannot set read-only property ${property}`);
+        throw new ClientInvalidPropertyError(
+            `Cannot set read-only property ${property}`,
+            { property }
+        );
     },
 });
+
+/**
+ * Accepted setpoints. Units take 16–30 °C (61–86 °F); the bounds are wider so
+ * only values no unit takes are refused, not a model's own limits.
+ *
+ * @private
+ */
+const SETPOINT_RANGE = {
+    celsius: { min: 8, max: MAX_CELSIUS_SETPOINT },
+    fahrenheit: { min: 46, max: 104 },
+};
+
+/**
+ * A numeric property given as a numeric string (as UIs and MQTT payloads
+ * often send it) becomes a number; anything else is left for _validate.
+ *
+ * @param {string} property
+ * @param {unknown} value
+ * @param {object} values the value maps
+ * @returns {unknown}
+ * @private
+ */
+const toNumber = (property, value, values) => {
+    const named = Object.keys(own(values, property) || {}).length > 0;
+    if (!named && typeof value === 'string' && value.trim() !== '') {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : value;
+    }
+    return value;
+};
+
+const invalid = (property, value, expected) =>
+    new ClientInvalidPropertyError(
+        `Invalid value ${JSON.stringify(value)} for ${property}, expected ${expected}`,
+        { property, value }
+    );
 
 const PROPERTY_VALUE_TRANSFORMERS = {
     currentTemperature: readOnly(
@@ -179,6 +261,8 @@ const PROPERTY_VALUE_TRANSFORMERS = {
     ),
     humidity: readOnly('humidity'),
     errorCode: readOnly('errorCode'),
+    waterFull: readOnly('waterFull'),
+    cleanFilter: readOnly('cleanFilter'),
 };
 
 const NOOP_PROPERTY_VALUE_TRANSFORMER = {
@@ -192,7 +276,14 @@ const NOOP_PROPERTY_VALUE_TRANSFORMER = {
  * @private
  */
 class PropertyTransformer {
-    constructor() {
+    /**
+     * @param {object} [options] client options
+     * @param {boolean} [options.halfDegree] encode °C setpoints with `Add0.5`
+     * @param {boolean} [options.encodedTargetHumidity] `Dwet` is (% − 15) / 5
+     */
+    constructor(options = {}) {
+        this._halfDegree = Boolean(options.halfDegree);
+        this._encodedTargetHumidity = Boolean(options.encodedTargetHumidity);
         this._properties = PROPERTY_VENDOR_CODES;
         this._values = PROPERTY_VENDOR_VALUE;
         this._reversedProperties = this._reverseProperties();
@@ -222,7 +313,7 @@ class PropertyTransformer {
     fromVendor(properties, state = {}) {
         const ret = {};
         for (const [property, value] of Object.entries(properties)) {
-            const reversedProperty = this._reversedProperties[property];
+            const reversedProperty = own(this._reversedProperties, property);
             // Skip vendor codes this client doesn't model — e.g. the `SlpMod`
             // companion echoed back in a set-confirmation, or extra fields a
             // device returns. Mapping them would throw on the unknown key.
@@ -239,6 +330,12 @@ class PropertyTransformer {
                 properties.SetTem,
                 'TemRec' in properties ? properties.TemRec : state.TemRec
             );
+        } else if ('SetTem' in properties && this._halfDegree) {
+            const half =
+                HALF_DEGREE_CODE in properties
+                    ? properties[HALF_DEGREE_CODE]
+                    : state[HALF_DEGREE_CODE];
+            ret.temperature = properties.SetTem + (half === 1 ? 0.5 : 0);
         }
         return ret;
     }
@@ -257,19 +354,42 @@ class PropertyTransformer {
      */
     toVendor(properties, state = {}) {
         const ret = {};
-        for (const [property, value] of Object.entries(properties)) {
+        for (const [property, input] of Object.entries(properties)) {
+            const value = toNumber(property, input, this._values);
+            const code = own(this._properties, property);
+            if (code === undefined) {
+                throw new ClientInvalidPropertyError(
+                    `Unknown property ${property}`,
+                    { property, value }
+                );
+            }
+            this._validate(property, value);
             const vendorValue = this._valueToVendor(property, value);
-            ret[this._properties[property]] = vendorValue;
-            const companions = PROPERTY_VENDOR_COMPANIONS[property];
+            ret[code] = vendorValue;
+            const companions = own(PROPERTY_VENDOR_COMPANIONS, property);
             if (companions) {
                 for (const companion of companions) {
                     ret[companion] = vendorValue;
                 }
             }
         }
+        if ('SetTem' in ret) {
+            this._validateSetpoint(ret.SetTem, this._isFahrenheit(ret, state));
+        }
         if ('SetTem' in ret && this._isFahrenheit(ret, state)) {
             Object.assign(ret, encodeFahrenheit(ret.SetTem));
             ret.TemUn = FAHRENHEIT_UNIT;
+        } else if ('SetTem' in ret && this._halfDegree) {
+            const whole = Math.floor(ret.SetTem);
+            ret[HALF_DEGREE_CODE] = ret.SetTem - whole >= 0.5 ? 1 : 0;
+            ret.SetTem = whole;
+        }
+        // The light sensor only acts while the display is on
+        if (
+            ret.LigSen === PROPERTY_VENDOR_VALUE.lightSensor.on &&
+            !('Lig' in ret)
+        ) {
+            ret.Lig = PROPERTY_VENDOR_VALUE.lights.on;
         }
         return ret;
     }
@@ -287,9 +407,63 @@ class PropertyTransformer {
         return [
             ...Object.values(this._properties),
             ...EXTRA_STATUS_VENDOR_CODES,
+            ...(this._halfDegree ? [HALF_DEGREE_CODE] : []),
         ].filter(
             code => !OPTIONAL_VENDOR_CODES.includes(code) || supported.has(code)
         );
+    }
+
+    /**
+     * Refuse a value the unit does not take: one that is not among a
+     * property's named values (or their raw vendor numbers), or a non-number
+     * for a numeric property
+     *
+     * @param {string} property
+     * @param {unknown} value
+     * @private
+     */
+    _validate(property, value) {
+        const values = own(this._values, property) || {};
+        const names = Object.keys(values);
+        if (names.length > 0) {
+            const known =
+                (typeof value === 'string' &&
+                    own(values, value) !== undefined) ||
+                (typeof value === 'number' &&
+                    Object.values(values).includes(value));
+            if (!known) {
+                throw invalid(property, value, `one of ${names.join(', ')}`);
+            }
+            return;
+        }
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+            throw invalid(property, value, 'a number');
+        }
+        if (
+            property === 'targetHumidity' &&
+            (!Number.isInteger(value) || value < 0 || value > 100)
+        ) {
+            throw invalid(property, value, 'a whole % from 0 to 100');
+        }
+    }
+
+    /**
+     * @param {number} setpoint
+     * @param {boolean} fahrenheit
+     * @private
+     */
+    _validateSetpoint(setpoint, fahrenheit) {
+        const unit = fahrenheit ? 'fahrenheit' : 'celsius';
+        const { min, max } = SETPOINT_RANGE[unit];
+        const step = !fahrenheit && this._halfDegree ? 0.5 : 1;
+        if (setpoint < min || setpoint > max || (setpoint / step) % 1 !== 0) {
+            const steps = step === 1 ? 'whole' : 'half';
+            throw invalid(
+                'temperature',
+                setpoint,
+                `${steps} degrees ${unit} from ${min} to ${max}`
+            );
+        }
     }
 
     _isFahrenheit(properties, state) {
@@ -298,20 +472,24 @@ class PropertyTransformer {
     }
 
     _valueFromVendor(property, value) {
-        const reversedValue = this._reversedValues[property][value] || value;
+        const reversedValue =
+            own(own(this._reversedValues, property) || {}, value) ?? value;
         return this._getValueTransformer(property).fromVendor(reversedValue);
     }
 
     _valueToVendor(property, value) {
-        const values = this._values[property] || {};
+        const values = own(this._values, property) || {};
         return this._getValueTransformer(property).toVendor(
-            values[value] !== undefined ? values[value] : value
+            own(values, value) ?? value
         );
     }
 
     _getValueTransformer(property) {
+        if (property === 'targetHumidity' && this._encodedTargetHumidity) {
+            return ENCODED_HUMIDITY_TRANSFORMER;
+        }
         return (
-            PROPERTY_VALUE_TRANSFORMERS[property] ||
+            own(PROPERTY_VALUE_TRANSFORMERS, property) ||
             NOOP_PROPERTY_VALUE_TRANSFORMER
         );
     }
@@ -343,4 +521,5 @@ module.exports = {
     encodeFahrenheit,
     decodeFahrenheit,
     OPTIONAL_VENDOR_CODES,
+    HALF_DEGREE_CODE,
 };

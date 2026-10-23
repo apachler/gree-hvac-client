@@ -56,6 +56,33 @@ attempt (see [`src/encryption-service.js`](../src/encryption-service.js)).
   network, each with its own `dev` reply (`cid`/`mac`, `name`, firmware `ver`,
   brand, model). `Client.discover()` collects them; some firmwares leave
   `cid`/`mac` empty in the `dev` pack and only the envelope's `cid` has it.
+  A multi-split gateway adds `subCnt`, the number of its indoor units.
+
+## Multi-split systems
+
+On a multi-split (VRF) system the WiFi module of the outdoor unit is the only
+device on the network — the gateway. It is scanned and bound like any unit and
+reports `subCnt` > 0 in its `dev` reply. The format below follows the
+[Home Assistant Gree integration](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent)
+(`gree_protocol.py`, `climate.py`) and
+[greeclimate#148](https://github.com/cmroche/greeclimate/pull/148); this
+project has not verified it on hardware.
+
+| Step | Client → Gateway | Gateway → Client |
+| ---- | ---------------- | ---------------- |
+| **List indoor units** | envelope `t:"pack"`, `i:0`, `tcid:<gateway>`; `pack` ⇒ `{t:"subList", mac:<gateway>, i:0}` (device key) | `pack` ⇒ `{t:"subList", c, list:[{mac, mid?}, ...]}` (device key) |
+| ↳ fallback (AES-ECB modules) | envelope `t:"subList"`, `i:1`, `tcid:<gateway>`; `pack` ⇒ `{mac:<gateway>, i:1}` (generic key) | `pack` ⇒ `{list:[...]}` (generic key) |
+| **Status** | envelope `tcid:<gateway>`; `pack` ⇒ `{t:"status", mac:<indoor unit>, cols}` | `dat` as usual |
+| **Set** | envelope `tcid:<gateway>`; `pack` ⇒ `{t:"cmd", opt, p, sub:<indoor unit>}` | `res` as usual |
+
+Modules differ in which form of the list request they answer, so
+`getSubUnits()` tries the device-key form and then (on AES-ECB modules) the
+generic-key one. With the `subUnit` option the client addresses status and
+set requests to that indoor unit as above. Indoor-unit MACs can be longer
+than 12 hex digits. Upstream
+[inwaar#30](https://github.com/inwaar/gree-hvac-client/issues/30) reports a
+gateway that answered status requests carrying the indoor unit in `sub`
+(instead of the pack `mac`) with zeros, while commands worked.
 
 ## Envelope format
 
@@ -108,15 +135,82 @@ Friendly name ⇄ vendor code mapping and value enums, as exposed by
 | `outdoorTemperature` | `OutEnvTem` | integer, `−40` offset | **Read-only** outdoor-unit sensor in °C. `0` = unsupported. Optional. |
 | `humidity` | `DwatSen` | integer % | **Read-only** indoor relative humidity. Optional. |
 | `errorCode` | `AllErr` | integer | **Read-only** fault code, `0` = no fault. Optional. |
+| `targetHumidity` | `Dwet` | integer % | Target humidity. Dehumidifiers send a plain %; air conditioners with humidity control (e.g. Airy Pro) encode it as % = 5 × `Dwet` + 15, i.e. `Dwet` = (% − 15) / 5 ([RobHofmann#473](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent/issues/473)) — set the `encodedTargetHumidity` option for those. Optional. |
+| `waterFull` | `DwatFul` | off→0, on→1 | **Read-only** dehumidifier water tank full. Optional. |
+| `cleanFilter` | `Dfltr` | off→0, on→1 | **Read-only** dehumidifier filter needs cleaning. Optional. |
+| `humidityMode` | `Dmod` | off→15, target→0, continuous→1, smart→2 | Humidity control of air conditioners that have it: keep `targetHumidity`, dry continuously (Dry mode only) or smart dry (Cool mode only). Dehumidifiers use `Dmod` differently (greeclimate: 0 default, 9 anion only), so unknown values pass through as numbers. Optional. |
+| `lightSensor` | `LigSen` | off→1, on→0 (inverted) | Display brightness follows the room light. It only acts with the display on, so turning it on also sends `Lig` 1 unless `lights` is set too. Optional. |
+| — | `Add0.5` | 0/1 | Half-degree bit of a °C setpoint on some firmwares; see [Half-degree setpoints](#half-degree-setpoints-add05). |
 
 ### Optional properties
 
-`antiDirectBlow`, `outdoorTemperature`, `humidity` and `errorCode` exist only
+`antiDirectBlow`, `outdoorTemperature`, `humidity`, `errorCode`,
+`humidityMode`, `lightSensor` and the dehumidifier codes (`targetHumidity`,
+`waterFull`, `cleanFilter`; names from
+[greeclimate](https://github.com/cmroche/greeclimate)'s `Props`) exist only
 on some units. A unit without the feature may answer a status request for one
 of these codes with an empty `dat`, so the client doesn't put them in every
 poll: after each bind it sends one `status` request per code, and polls a code
 from then on only if the unit answered it with a value. Until then the
 property is simply absent from `update` events.
+
+### Status batching
+
+Some firmwares stop answering a `status` request that asks for too much:
+`U-CS532Z(LT)V3.75` answers 29 columns, returns nothing useful for 30 and
+goes silent from 31, and replies stop at about 800 bytes; a cut-short reply
+can carry a column with an empty name
+([RobHofmann 5.0 protocol notes](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent/blob/5.0-dev/docs/protocol.md)).
+greeclimate polls 20 columns per request. The client splits each poll into
+requests of at most `statusBatchSize` (20) codes and takes the poll as
+answered once every batch is; columns without a name are dropped.
+
+Status answers carry no request id, so the client matches each one to the
+oldest pending request (poll batch, probe or query) that asked for all of its
+columns; an answer that matches none counts as the answer to the poll.
+
+### Firmware id (`hid`)
+
+After the probes the client asks once for the `hid` status column, e.g.
+`362001000762+U-CS532AE(LT)V3.31.bin`: firmware code, WiFi module type and
+version. `getDeviceInfo()` reports it, and warns for firmware codes whose
+later builds were found to be cloud-only (no local control at all), from
+[greeclimate's list](https://github.com/cmroche/greeclimate/blob/master/docs/CLOUD_ONLY_FIRMWARE.md)
+— upgrading those modules can end local control for good. The README has the
+table: [Firmware updates can end local control](../README.md#firmware-updates-can-end-local-control). Some units report
+`hid` in the scan answer already; others not at all.
+
+### Raw vendor codes, clock and name
+
+`getVendorProperties(codes)` / `setVendorProperties({code: value})` read and
+write any code raw — the way to reach codes this client has no property for,
+such as `UvcControl`, `AutoClean`, `ChildLock`, `CompressorFqy` or the
+air-to-water heat-pump codes (`HeWatOutTemSet`, ...), whose meaning is only
+partly known. The clock is the `time` column (`YYYY-MM-DD HH:MM:SS`, local
+time; set with a `cmd` carrying `sub`, per
+[gree-remote](https://github.com/tomikaa87/gree-remote#synchronizing-the-time-on-the-device)),
+the device name the `name` column.
+
+Not implemented on purpose:
+
+- **Schedules** (`t:"setT"`): the vendor app deletes schedules it did not
+  create, and frequent schedule queries are reported to stall units
+  ([gree-remote#70](https://github.com/tomikaa87/gree-remote/issues/70)).
+- **Changing the cloud server** (`host`): it breaks the vendor app, and the
+  dummy-server approach reportedly fails from firmware 1.31 on.
+- **Firmware upgrades** (`t:"upgrade"`): an upgrade can switch a module to
+  cloud-only firmware (see above).
+
+### External temperature sensor (iFeel)
+
+There is no known way to feed an external temperature to the unit over the
+LAN protocol. "iFeel" (the unit regulating on a sensor in the remote) is
+sent by the IR remote only, and any WiFi command switches it off again
+([RobHofmann#283](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent/issues/283),
+[home-assistant/core#118221](https://github.com/home-assistant/core/issues/118221)).
+`TemSen` is read-only. The workaround is a software thermostat: compare the
+external sensor with the target and shift `temperature` (or switch `power`)
+accordingly.
 
 ### Beeper
 
@@ -179,6 +273,34 @@ then in °F, sent as `SetTem` + `TemRec` + `TemUn`, and decoded back to °F in
 `update`/`success` events. A °C setpoint is sent as `SetTem` alone, as before.
 A `SetTem` above 40 while in °F is taken as already being °F, since some
 firmwares report it that way.
+
+## Half-degree setpoints (`Add0.5`)
+
+Some Celsius firmwares take half degrees: `SetTem` 23 + `Add0.5` 1 is
+23.5 °C. Others ignore `Add0.5`, and some use `TemRec` for it instead, so it
+is opt-in (`halfDegree` option, as in the RobHofmann integration): the client
+then polls `Add0.5`, sends `SetTem` = ⌊t⌋ + `Add0.5` = 1 for a .5 setpoint,
+and reports `temperature` with the half degree. °F setpoints keep using
+`TemRec`.
+
+## WiFi setup (AP mode)
+
+A unit whose WiFi was reset (MODE + WIFI, or MODE + TURBO, on the remote for
+5 s) opens its own access point, named after the last digits of its MAC,
+password usually `12345678`. Joined to it, send this **unencrypted** to
+`192.168.1.1:7000`:
+
+```json
+{"psw": "<password>", "ssid": "<network>", "t": "wlan"}
+```
+
+The unit answers `{"t":"ret","r":200}` (some add `mac`, some send nothing)
+and joins the network
+([gree-remote#29](https://github.com/tomikaa87/gree-remote/issues/29)). Some
+firmwares take passwords of at most 31 characters. The unit gets a new device
+key, so it has to be bound again. A unit that is already on a network cannot
+be moved to another one remotely: reset it on the remote first.
+`Client.configureWifi()` sends the packet.
 
 ## The TemSen +40 quirk
 

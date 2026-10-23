@@ -4,7 +4,6 @@ const { Client } = require('../src/client');
 const { EncryptionService, EcbCipher } = require('../src/encryption-service');
 const device = require('./support/device');
 const { createSocketMock } = require('./support/socket-mock');
-const { OPTIONAL_VENDOR_CODES } = require('../src/property-transformer');
 
 jest.mock('dgram');
 jest.useFakeTimers();
@@ -33,13 +32,11 @@ describe('Status timeout', () => {
     let clientEncrypt;
     let noResponses;
 
-    // Polls only: the one-off probes for optional properties after binding
-    // are status requests too.
+    // Polls only: the one-off probes for optional properties and the
+    // firmware query after binding are status requests too.
     const statusRequests = () =>
         clientEncrypt.mock.calls.filter(
-            ([msg]) =>
-                msg.t === 'status' &&
-                !msg.cols.every(col => OPTIONAL_VENDOR_CODES.includes(col))
+            ([msg]) => msg.t === 'status' && msg.cols.includes('Pow')
         ).length;
 
     /** Drive scan -> bind -> bindok so polling starts */

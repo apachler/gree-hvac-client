@@ -35,6 +35,11 @@ describe('Fahrenheit setpoint', () => {
             }
         });
 
+        it('rounds a SetTem/TemRec pair no °F setpoint encodes to', () => {
+            // 0 °C is exactly 32 °F, so it never comes with TemRec 1
+            expect(decodeFahrenheit(0, 1)).toBe(32);
+        });
+
         it('passes a SetTem that is already °F through unchanged', () => {
             expect(decodeFahrenheit(75, 0)).toBe(75);
         });

@@ -1,0 +1,16 @@
+{
+  "//": "Only for `npm run typecheck`: the package is plain JS, index.d.ts is hand-written.",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "es2021",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "files": ["index.d.ts", "test/types/usage.ts"]
+}

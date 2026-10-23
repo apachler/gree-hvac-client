@@ -41,6 +41,8 @@ check with no dependencies and also honours `GREE_SKIP_LINT=1`.
 ```bash
 npm run lint          # ESLint + Prettier
 npm run lint:fix      # auto-fix
+npm run typecheck     # check the hand-written index.d.ts against the source
+npm run lint:lockfile # every lockfile entry from registry.npmjs.org over HTTPS
 npm test              # Jest unit tests
 npm run test:coverage # Jest with a coverage summary
 npm run docs          # regenerate README.md from README.hbs (jsdoc2md)
@@ -59,6 +61,7 @@ npx jest -t "re-bind"          # only tests whose name matches
 | Path                          | What it is                                          |
 | ----------------------------- | --------------------------------------------------- |
 | `index.js`                    | entry point — re-exports `src/client`               |
+| `index.d.ts`                  | hand-written TypeScript types — keep in step        |
 | `src/client.js`               | the `Client` class (connect, bind, get/set)         |
 | `src/client-options.js`       | option defaults + `GREE_HVAC_*` env overrides       |
 | `src/errors.js`               | `ClientError` subclasses emitted as `error`         |
@@ -97,7 +100,8 @@ A `feat:` triggers a minor release, `fix:` or `perf:` a patch; a `!` or
 
 Before opening a PR:
 
-1. `npm run lint && npm test` pass.
+1. `npm run lint && npm run typecheck && npm test` pass (update `index.d.ts`
+   when you change the public API).
 2. Run `npm run docs` if you changed any JSDoc or `README.hbs`, and commit the
    regenerated `README.md`.
 3. Update docs when behaviour changes.

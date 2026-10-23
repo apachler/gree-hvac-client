@@ -3,6 +3,50 @@ const util = require('util');
 
 const { version } = require('../package.json');
 
+/**
+ * Field names whose values never go to a log: the cipher and device keys
+ * (`key` in encrypt/decrypt results and the `bindok` pack) and the WiFi
+ * password of the `wlan` packet. Debug logs end up in public issues.
+ *
+ * @private
+ */
+const REDACTED_FIELDS = new Set(['key', 'psw', 'password']);
+
+/**
+ * Copy of `value` with every REDACTED_FIELDS entry replaced, at any depth
+ *
+ * @param {unknown} value
+ * @param {WeakSet<object>} [seen] guards against cycles
+ * @returns {unknown}
+ * @private
+ */
+const redact = (value, seen = new WeakSet()) => {
+    if (value === null || typeof value !== 'object' || value instanceof Error) {
+        return value;
+    }
+    if (seen.has(value)) {
+        return '[Circular]';
+    }
+    seen.add(value);
+    if (Array.isArray(value)) {
+        return value.map(item => redact(item, seen));
+    }
+    const copy = {};
+    for (const [name, field] of Object.entries(value)) {
+        copy[name] = REDACTED_FIELDS.has(name)
+            ? '[redacted]'
+            : redact(field, seen);
+    }
+    return copy;
+};
+
+const redactFormat = winston.format(info => {
+    for (const [name, field] of Object.entries(info)) {
+        info[name] = REDACTED_FIELDS.has(name) ? '[redacted]' : redact(field);
+    }
+    return info;
+});
+
 const formats = {
     print: winston.format.printf(info => {
         const time = `[${info.timestamp} ${info.ms}]`;
@@ -22,14 +66,11 @@ const formats = {
 
         return `${line} ${info.message}`;
     }),
-    vscode: winston.format.printf(info =>
-        Object.fromEntries(Object.entries(info))
-    ),
 };
 
-const env = process.env.NODE_ENV;
-const isDevelopment = env === 'development';
-const isTest = env === 'test';
+// Only Jest sets this to 'test': keeps the suite's output clean. The app's
+// own NODE_ENV (development, production) leaves the format alone.
+const isTest = process.env.NODE_ENV === 'test';
 
 const LOG_LEVELS = [
     'error',
@@ -105,6 +146,7 @@ const createLogger = level =>
                     stderrLevels: ['error'],
                     consoleWarnLevels: ['warn'],
                     format: winston.format.combine(
+                        redactFormat(),
                         winston.format.timestamp(),
                         winston.format.ms(),
                         winston.format.metadata({
@@ -120,9 +162,8 @@ const createLogger = level =>
                                 'version',
                             ],
                         }),
-                        ...(isDevelopment
-                            ? [formats.vscode]
-                            : [winston.format.colorize(), formats.print])
+                        winston.format.colorize(),
+                        formats.print
                     ),
                 }),
             ],
@@ -132,4 +173,7 @@ const createLogger = level =>
 module.exports = {
     createLogger,
     guardLogger,
+    // for tests
+    formats,
+    redact,
 };

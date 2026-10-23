@@ -47,6 +47,10 @@ describe('AES encryption', () => {
         SUT.on('error', e => errors.push(e));
 
         connected = SUT.connect();
+        // a test that never connects rejects this with ClientCancelConnectError
+        // on disconnect, via a faked nextTick that would otherwise surface in
+        // whichever test advances the clock next
+        connected.catch(() => {});
     });
 
     afterEach(async () => {

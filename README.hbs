@@ -2,6 +2,7 @@
 
 ![GitHub release](https://img.shields.io/github/v/release/apachler/gree-hvac-client?sort=semver)
 ![CI status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/ci.yml?label=ci)
+![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fapachler%2Fgree-hvac-client%2Fbadges%2Fcoverage.json)
 ![CodeQL status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/codeql.yml?label=codeql)
 ![Release status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/release.yml?label=release)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/apachler/gree-hvac-client/badge)](https://securityscorecards.dev/viewer/?uri=github.com/apachler/gree-hvac-client)
@@ -9,6 +10,13 @@
 ![Code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)
 
 A client for communicating with Gree air conditioners.
+
+This is a maintained fork of
+[inwaar/gree-hvac-client](https://github.com/inwaar/gree-hvac-client) by Igor
+Starovierov, released under the same license (GPL-3.0). It adds, among
+others, cipher auto-detection, recovery from re-paired or re-addressed units,
+Fahrenheit and half-degree setpoints, optional sensors, discovery,
+multi-split units and TypeScript types; see the [changelog](CHANGELOG.md).
 
 ## Requirements
 
@@ -25,13 +33,13 @@ self-contained npm tarball; needs no git, no build step, ideal for Docker /
 air-gapped builds):
 
 ```shell
-npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz
+npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.3.0/gree-hvac-client-4.3.0.tgz
 ```
 
 **Or install the Git ref** (npm clones the repo at the tag):
 
 ```shell
-npm install github:apachler/gree-hvac-client#v4.2.0
+npm install github:apachler/gree-hvac-client#v4.3.0
 ```
 
 Either way you can pin it in `package.json`:
@@ -39,7 +47,7 @@ Either way you can pin it in `package.json`:
 ```json
 {
   "dependencies": {
-    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz"
+    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.3.0/gree-hvac-client-4.3.0.tgz"
   }
 }
 ```
@@ -54,6 +62,8 @@ const Gree = require('gree-hvac-client');
 
 const client = new Gree.Client({host: '192.168.7.60'});
 
+// Always handle errors: an unhandled 'error' event terminates the process
+client.on('error', error => console.error(error.message));
 client.on('connect', () => {
     client.setProperty(Gree.PROPERTY.temperature, 25);
     client.setProperty(Gree.PROPERTY.lights, Gree.VALUE.lights.off);
@@ -68,6 +78,7 @@ const Gree = require('gree-hvac-client');
 
 const client = new Gree.Client({host: '192.168.7.60'});
 
+client.on('error', error => console.error(error.message));
 client.on('connect', (client) => {
     console.log('connected to', client.getDeviceId());
 });
@@ -86,9 +97,74 @@ Find devices on the network:
 const Gree = require('gree-hvac-client');
 
 Gree.Client.discover({host: '192.168.7.255'}).then(devices => {
-    // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.7.60', version: 'V1.1.13', pack: {...}}]
+    // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.7.60', version: 'V1.1.13', subUnits: 0, pack: {...}}]
     console.log(devices);
 });
+```
+
+Read the current state on demand (instead of waiting for the next poll):
+
+```javascript
+const client = new Gree.Client({host: '192.168.7.60', autoConnect: false, poll: false});
+client.on('error', error => console.error(error.message));
+
+(async () => {
+    await client.connect();
+    const properties = await client.getProperties();
+    console.log(properties.temperature, properties.currentTemperature);
+    await client.disconnect();
+})();
+```
+
+The snippets below use `await` too: run them inside an `async` function, as
+here (CommonJS has no top-level `await`).
+
+`getProperties()` rejects with `ClientNoResponseError` when the unit does not
+answer within `pollingTimeout`. The error classes are exported
+(`Gree.ClientNoResponseError`, ...) for `instanceof` checks.
+
+### Multi-split systems
+
+On a multi-split system one WiFi module in the outdoor unit (the gateway)
+serves several indoor units; `discover()` reports it with `subUnits` > 0.
+List the indoor units, then create one client per indoor unit with the
+`subUnit` option — `host` stays the gateway's address:
+
+```javascript
+const gateway = new Gree.Client({host: '192.168.7.70', poll: false});
+gateway.on('error', error => console.error(error.message));
+gateway.on('connect', async () => {
+    const units = await gateway.getSubUnits(); // [{mac: 'c0000001a2b3c4'}, ...]
+    await gateway.disconnect();
+
+    const bedroom = new Gree.Client({host: '192.168.7.70', subUnit: units[0].mac});
+    bedroom.on('update', (updated, properties) => console.log(properties));
+});
+```
+
+> Not verified on hardware by this project: the message format follows the
+> [Home Assistant Gree integration](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent),
+> and some gateways are reported to answer status requests for indoor units
+> with zeros (upstream [inwaar#30](https://github.com/inwaar/gree-hvac-client/issues/30)).
+> Run `example/probe.js` against your gateway and report what you see.
+
+### TypeScript
+
+Type definitions ship with the package (`index.d.ts`): property names, their
+values, events, options and errors are typed, and `setProperty` rejects
+read-only properties and unknown values at compile time.
+
+### Check your unit
+
+`example/probe.js` connects to one unit and prints every vendor code it
+reports, raw and decoded, which optional sensors it answered, its firmware id
+(with a warning for firmwares listed in
+[Firmware updates](#firmware-updates-can-end-local-control)), its clock and
+its indoor units — handy to check a value that looks wrong, and to attach to
+an issue:
+
+```shell
+node node_modules/gree-hvac-client/example/probe.js 192.168.7.60
 ```
 
 ### Connection loss and reconnect
@@ -121,14 +197,14 @@ client.on('error', error => console.error(error.message));
 > For the full protocol — encryption, message flow, vendor codes and the
 > `TemSen +40` quirk — see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-| Command | Values | Description |
+| Property | Values | Description |
 |-|-|-|
-| **temperature** | any integer |Target setpoint, in `temperatureUnit` (whole °F are encoded exactly, see [Fahrenheit setpoints](docs/PROTOCOL.md#fahrenheit-setpoints-temrec)) |
+| **temperature** | number |Target setpoint, in the unit's `temperatureUnit`: whole °F (encoded exactly, see [Fahrenheit setpoints](docs/PROTOCOL.md#fahrenheit-setpoints-temrec)), whole °C, or half °C with the `halfDegree` option |
 | **currentTemperature** | any integer |Indoor sensor in °C. (Read-only) |
 | **outdoorTemperature** | any integer |Outdoor sensor in °C, `0` if the unit has none. (Read-only, optional) |
 | **humidity** | any integer |Indoor relative humidity in %. (Read-only, optional) |
 | **errorCode** | any integer |Fault code, `0` = no fault. (Read-only, optional) |
-| **temperatureUnit** | _celsius_, _fahrenheit_ | Unit for `temperature` |
+| **temperatureUnit** | _celsius_, _fahrenheit_ | Unit for `temperature` (and for the unit's display) |
 | **mode** | _auto_, _cool_, _heat_, _dry_, _fan_only_|Operation mode |
 | **fanSpeed** | _auto_, _low_, _mediumLow_, _medium_, _mediumHigh_, _high_ | Fan speed |
 | **swingHor** | _default_, _full_, _fixedLeft_, _fixedMidLeft_, _fixedMid_, _fixedMidRight_, _fixedRight_, _fullAlt_ | Horizontal Swing |
@@ -144,22 +220,97 @@ client.on('error', error => console.error(error.message));
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
 | **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
+| **targetHumidity** | any integer | Target humidity in % (optional). Air conditioners with humidity control (e.g. Airy Pro) encode it as % = 5 × `Dwet` + 15: set the `encodedTargetHumidity` option for those |
+| **waterFull** | _off_, _on_ | Water tank is full. (Read-only, dehumidifiers, optional) |
+| **cleanFilter** | _off_, _on_ | Filter needs cleaning. (Read-only, dehumidifiers, optional) |
+| **humidityMode** | _off_, _target_, _continuous_, _smart_ | Humidity control of air conditioners that have it; _continuous_ only in Dry, _smart_ only in Cool mode (optional) |
+| **lightSensor** | _off_, _on_ | Display brightness follows the room light; turning it on also turns the `lights` on (optional) |
+
+Values are checked before anything is sent: an unknown or read-only property,
+a value a property doesn't have, or a setpoint no unit takes is rejected with
+`ClientInvalidPropertyError`. Numeric strings (`'24'`) are taken as numbers.
+Commands are spaced at least `commandInterval` (100 ms) apart, as units are
+reported to stall when flooded.
 
 _Optional_ properties exist only on some units: the client probes for them
 after connecting and only reports the ones the unit answers. To stop the unit
-beeping on every command, use the `silent` option.
+beeping on every command, use the `silent` option. For half-degree °C
+setpoints (e.g. `23.5`) on firmwares that support them, set `halfDegree`.
+
+## More device access
+
+```javascript
+// Firmware id, and a warning for firmwares whose later builds are cloud-only
+const info = await client.getDeviceInfo();
+if (info.upgradeWarning) console.warn(info.upgradeWarning);
+
+// Codes this client has no property for, raw (UV-C, self-clean, compressor, ...)
+const {UvcControl} = await client.getVendorProperties(['UvcControl']);
+await client.setVendorProperties({UvcControl: 1});
+
+await client.setClock();          // the unit's clock, for its own timers
+await client.setName('Bedroom');  // the name the app and discover() show
+```
+
+There is no way to feed an external temperature sensor to the unit over the
+LAN (iFeel works from the IR remote only); see
+[docs/PROTOCOL.md](docs/PROTOCOL.md#external-temperature-sensor-ifeel).
+
+## Firmware updates can end local control
+
+Some WiFi-module firmware updates, offered in the Gree+ app, switch a unit
+to **cloud-only** control: it stops answering on UDP port 7000, and this
+client (like every local integration) can no longer reach it. Gree confirmed
+this to users and offers no official downgrade
+([home-assistant/core#176486](https://github.com/home-assistant/core/issues/176486)).
+
+Find your unit's firmware code with `client.getDeviceInfo()` (`firmwareCode`,
+`firmwareVersion`) or `example/probe.js`; the Gree+ app shows the version
+only. **If your firmware code is listed below, don't install WiFi-module
+updates beyond the last version that still works locally.**
+
+| Firmware code | Module | Reported on | Last version verified to work locally | First cloud-only version found |
+| --- | --- | --- | --- | --- |
+| `362001068254` | `4MWB65VR` | Gree Airy, Gree Clivia | **2.11** | 2.12 |
+| `362001067541` | `WB05WR11` | Gree GWH12ATCXB-D6DNA4B/I | **2.04** | 2.08 |
+| `362001066300` | `4MWB05DF13` | unknown | **3.05** | 3.27 |
+| `362001068295` | `4MWB05UR` | unknown | **2.02** | 2.04 |
+| `362001067540` | `WB05WR13` | unknown | **2.06** | 2.04 — versions are not in order: 2.04 is cloud-only, 2.06 works again |
+| `362001068411` | `WB05HR13` | unknown | none found | 1.02 |
+| `362001071519` | `4MWB65AR11` | Gree Clivia R22 | none found | 2.00 (2.04 reported) |
+
+Source: [greeclimate's cloud-only firmware list](https://github.com/cmroche/greeclimate/blob/master/docs/CLOUD_ONLY_FIRMWARE.md) (as of 17 October
+2026; firmware names in [its known HIDs](https://github.com/cmroche/greeclimate/blob/master/docs/HIDS.md)). These are the builds
+that were inspected, not a complete cutoff: a code missing here is no promise
+that its updates are safe, and versions can't be compared across firmware
+codes. `getDeviceInfo()` sets `upgradeWarning` for the codes above.
+
+Units already on a cloud-only version: users report downgrading
+`362001068254` from 2.12 to 2.11 through the unit's cloud connection (see
+the issue above) — unofficial, and a wrong image can brick the WiFi module.
+Blocking the unit's internet access does not bring local control back.
 
 ## Configuring HVAC WiFi
 
 1. Make sure your HVAC is running in AP mode. You can reset the WiFi config by pressing MODE +WIFI (or MODE + TURBO) on the AC remote for 5s.
-2. Connect with the AP wifi network (the SSID name should be a 8-character alphanumeric, e.g. "u34k5l166").
-3. Run the following in your UNIX terminal:
+2. Connect to the unit's own WiFi network: a short alphanumeric name, on many units the last digits of its MAC address; the password is usually `12345678`.
+3. Send your network's credentials:
+
+```javascript
+Gree.Client.configureWifi({ssid: 'YOUR_WIFI_SSID', password: 'YOUR_WIFI_PASSWORD'})
+    .then(({confirmed}) => console.log(confirmed ? 'joined' : 'no confirmation'));
+```
+
+`confirmed` is `false` when the unit sent no confirmation, which some firmwares
+never do: check whether it shows up on your network (`Client.discover()`).
+Some firmwares take passwords of at most 31 characters. Without Node, the same
+packet can be sent with netcat:
 
 ```shell
 echo -n "{\"psw\": \"YOUR_WIFI_PASSWORD\",\"ssid\": \"YOUR_WIFI_SSID\",\"t\": \"wlan\"}" | nc -cu 192.168.1.1 7000
-````
+```
 
-Note: This command may vary depending on your OS (e.g. Linux, macOS, CygWin). If facing problems, please consult the appropriate netcat manual.
+(`nc` options differ between netcat variants; `-c` is the BSD/macOS one.)
 
 ## API Reference
 {{>main}}
@@ -174,9 +325,11 @@ See [`.env.example`](.env.example) for the full list and defaults.
 ```bash
 git clone https://github.com/apachler/gree-hvac-client.git
 cd gree-hvac-client
-npm install        # also installs the git hook (pre-push lint)
+npm install        # also installs the git hooks (pre-push lint, commit-msg check)
 npm test           # Jest unit tests
 npm run lint       # ESLint + Prettier
+npm run typecheck  # check index.d.ts against the source
+npm run lint:lockfile  # every package from registry.npmjs.org over HTTPS
 npm run docs       # regenerate README.md from README.hbs
 ```
 
@@ -195,12 +348,22 @@ automated with semantic-release.
 Found a vulnerability? Please follow [SECURITY.md](SECURITY.md) — do **not** open
 a public issue.
 
+Every release tarball comes with signed build provenance (SLSA, Sigstore) and
+a CycloneDX SBOM as release assets. Verify a downloaded tarball with:
+
+```shell
+gh attestation verify gree-hvac-client-<version>.tgz -R apachler/gree-hvac-client
+```
+
 ## License
 
 This project is licensed under the GNU GPLv3 - see the [LICENSE](LICENSE) file for details
 
 ## Acknowledgments
 
+- [inwaar](https://github.com/inwaar) (Igor Starovierov) for the original
+  [gree-hvac-client](https://github.com/inwaar/gree-hvac-client) this fork is
+  based on
 - [tomikaa87](https://github.com/tomikaa87) for reverse-engineering the Gree protocol
 - [oroce](https://github.com/oroce) for inspiration
 - [arthurkrupa](https://github.com/arthurkrupa) for inspiration

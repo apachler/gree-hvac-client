@@ -8,6 +8,7 @@
  * @property {string} host=192.168.1.255 - GREE device ip-address
  * @property {number} port=7000 - GREE device UDP port
  * @property {string|null} mac=null - Only bind to the device with this MAC-address (`cid`), with or without colons. Recommended when `host` is a broadcast address: the device is then rediscovered by its MAC on every reconnect, so a DHCP address change is followed automatically.
+ * @property {string|null} subUnit=null - Control one indoor unit of a multi-split system: its MAC as listed by `getSubUnits()`. `host`/`mac` then address the outdoor unit's WiFi module (the gateway), which relays status and set requests to this indoor unit.
  * @property {number} connectTimeout=3000 - Reconnect to device if no success timeout
  * @property {number} reconnectMaxDelay=30000 - Upper bound for the reconnect back-off: each consecutive failed attempt doubles the wait (starting at `connectTimeout`) up to this value. Set it to `connectTimeout` to retry at a fixed rate.
  * @property {number} bindTimeout=1000 - Wait for a bind confirmation before retrying the bind with the other cipher (AES-GCM)
@@ -16,6 +17,10 @@
  * @property {number} pollingInterval=3000 - Device properties polling interval
  * @property {number} pollingTimeout=1000 - Device properties polling timeout, emits `no_response` events in case of no response from HVAC device for a status request
  * @property {number} maxNoResponse=3 - Re-scan and re-bind the device after this many consecutive `no_response` events (the device may have dropped off WiFi, been re-paired with a new key or moved to another address). `0` disables it.
+ * @property {number} statusBatchSize=20 - Most vendor codes asked for in one status request; more are split over several requests (some firmwares stop answering above ~29 codes or ~800 bytes)
+ * @property {boolean} halfDegree=false - Celsius setpoints in half degrees (e.g. 23.5), for firmwares that carry the half degree in `Add0.5`. Leave off unless your unit shows half degrees: other firmwares ignore it.
+ * @property {boolean} encodedTargetHumidity=false - The unit sends `targetHumidity` encoded as (% − 15) / 5, as air conditioners with humidity control do (e.g. Airy Pro); leave off for dehumidifiers
+ * @property {number} commandInterval=100 - Least time between two set requests (ms); faster ones are queued, as units are reported to stall when flooded. `0` disables it.
  * @property {boolean} silent=false - Ask the unit not to beep when it receives a command (sends the `Buzzer_ON_OFF`/`BuzzerCtrl` flags with every set request; units without a controllable beeper ignore them)
  * @property {string} logLevel=error - Logging level (debug, info, warn, error)
  * @property {boolean} debug=false - Override logLevel to debug, deprecated, use logLevel option
@@ -24,6 +29,7 @@ const CLIENT_OPTIONS = {
     host: '192.168.1.255',
     port: 7000,
     mac: null,
+    subUnit: null,
     connectTimeout: 3000,
     reconnectMaxDelay: 30000,
     bindTimeout: 1000,
@@ -32,6 +38,10 @@ const CLIENT_OPTIONS = {
     pollingInterval: 3000,
     pollingTimeout: 1000,
     maxNoResponse: 3,
+    statusBatchSize: 20,
+    halfDegree: false,
+    encodedTargetHumidity: false,
+    commandInterval: 100,
     silent: false,
     logLevel: 'error',
     debug: false,
@@ -46,6 +56,7 @@ const ENV_OPTIONS = {
     host: 'GREE_HVAC_HOST',
     port: 'GREE_HVAC_PORT',
     mac: 'GREE_HVAC_MAC',
+    subUnit: 'GREE_HVAC_SUB_UNIT',
     connectTimeout: 'GREE_HVAC_CONNECT_TIMEOUT',
     reconnectMaxDelay: 'GREE_HVAC_RECONNECT_MAX_DELAY',
     bindTimeout: 'GREE_HVAC_BIND_TIMEOUT',
@@ -54,6 +65,10 @@ const ENV_OPTIONS = {
     pollingInterval: 'GREE_HVAC_POLLING_INTERVAL',
     pollingTimeout: 'GREE_HVAC_POLLING_TIMEOUT',
     maxNoResponse: 'GREE_HVAC_MAX_NO_RESPONSE',
+    statusBatchSize: 'GREE_HVAC_STATUS_BATCH_SIZE',
+    halfDegree: 'GREE_HVAC_HALF_DEGREE',
+    encodedTargetHumidity: 'GREE_HVAC_ENCODED_TARGET_HUMIDITY',
+    commandInterval: 'GREE_HVAC_COMMAND_INTERVAL',
     silent: 'GREE_HVAC_SILENT',
     logLevel: 'GREE_HVAC_LOG_LEVEL',
     debug: 'GREE_HVAC_DEBUG',
