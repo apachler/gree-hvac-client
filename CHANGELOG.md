@@ -1,3 +1,10 @@
+# [4.3.0](https://github.com/apachler/gree-hvac-client/compare/v4.2.0...v4.3.0) (2026-10-23)
+
+
+### Features
+
+* TypeScript types, multi-split, batching, firmware info, WiFi setup and more device access ([#49](https://github.com/apachler/gree-hvac-client/issues/49)) ([48a6306](https://github.com/apachler/gree-hvac-client/commit/48a630654c51b66b9e7d9da79da2a11c59c73c5f))
+
 # [4.2.0](https://github.com/apachler/gree-hvac-client/compare/v4.1.0...v4.2.0) (2026-10-23)
 
 
