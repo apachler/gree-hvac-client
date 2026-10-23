@@ -30,6 +30,12 @@ changes you haven't committed (so the fix lands in a reviewable commit). It runs
 on whatever `node` is on your `PATH`, so it needs Node ≥ 20.19 too. Skip it for
 an emergency push with `GREE_SKIP_LINT=1 git push ...`.
 
+The **commit-msg hook** rejects a commit whose subject isn't a Conventional
+Commit (`<type>[(scope)][!]: <description>`, types `feat|fix|docs|style|
+refactor|perf|test|build|ci|chore|revert`). Git-generated `Merge`, `Revert`,
+`fixup!`, `squash!` and `amend!` subjects pass through. It's a plain shell
+check with no dependencies and also honours `GREE_SKIP_LINT=1`.
+
 ## Development workflow
 
 ```bash
