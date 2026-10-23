@@ -1,5 +1,5 @@
 # https://editorconfig.org
-# Mirrors the Prettier/ESLint config so non-VSCode editors produce conforming code.
+# Mirrors the Prettier/ESLint config so editors produce conforming code.
 root = true
 
 [*]
