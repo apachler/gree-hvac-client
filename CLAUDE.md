@@ -55,6 +55,8 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   (tests use fake timers), so no hardware is needed. Add a test with new behaviour.
 - **Style:** ESLint + Prettier — single quotes, 4-space JS, 2-space JSON/YAML.
   The pre-push hook runs `eslint --fix`; `GREE_SKIP_LINT=1 git push` to skip.
+  The commit-msg hook enforces Conventional-Commit subjects (Merge/Revert/
+  fixup! pass; `GREE_SKIP_LINT=1` skips).
 - **README is generated.** Edit prose in `README.hbs`; the API section is JSDoc
   from `src/*.js`. Run `npm run docs` and commit `README.md` — the `docs`
   workflow fails CI if it's stale.
