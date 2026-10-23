@@ -1,3 +1,10 @@
+# [4.4.0](https://github.com/apachler/gree-hvac-client/compare/v4.3.0...v4.4.0) (2026-10-23)
+
+
+### Features
+
+* 24/7 connection recovery: new socket per attempt, recovery pause, reconnecting event ([#56](https://github.com/apachler/gree-hvac-client/issues/56)) ([5a6e2f7](https://github.com/apachler/gree-hvac-client/commit/5a6e2f70bda2e3aba37ed46ab34123fa72a19654))
+
 # [4.3.0](https://github.com/apachler/gree-hvac-client/compare/v4.2.0...v4.3.0) (2026-10-23)
 
 
