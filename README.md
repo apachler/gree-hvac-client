@@ -2,6 +2,7 @@
 
 ![GitHub release](https://img.shields.io/github/v/release/apachler/gree-hvac-client?sort=semver)
 ![CI status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/ci.yml?label=ci)
+![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fapachler%2Fgree-hvac-client%2Fbadges%2Fcoverage.json)
 ![CodeQL status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/codeql.yml?label=codeql)
 ![Release status](https://img.shields.io/github/actions/workflow/status/apachler/gree-hvac-client/release.yml?label=release)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/apachler/gree-hvac-client/badge)](https://securityscorecards.dev/viewer/?uri=github.com/apachler/gree-hvac-client)
@@ -9,6 +10,13 @@
 ![Code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)
 
 A client for communicating with Gree air conditioners.
+
+This is a maintained fork of
+[inwaar/gree-hvac-client](https://github.com/inwaar/gree-hvac-client) by Igor
+Starovierov, released under the same license (GPL-3.0). It adds, among
+others, cipher auto-detection, recovery from re-paired or re-addressed units,
+Fahrenheit and half-degree setpoints, optional sensors, discovery,
+multi-split units and TypeScript types; see the [changelog](CHANGELOG.md).
 
 ## Requirements
 
@@ -1139,12 +1147,22 @@ automated with semantic-release.
 Found a vulnerability? Please follow [SECURITY.md](SECURITY.md) — do **not** open
 a public issue.
 
+Every release tarball comes with signed build provenance (SLSA, Sigstore) and
+a CycloneDX SBOM as release assets. Verify a downloaded tarball with:
+
+```shell
+gh attestation verify gree-hvac-client-<version>.tgz -R apachler/gree-hvac-client
+```
+
 ## License
 
 This project is licensed under the GNU GPLv3 - see the [LICENSE](LICENSE) file for details
 
 ## Acknowledgments
 
+- [inwaar](https://github.com/inwaar) (Igor Starovierov) for the original
+  [gree-hvac-client](https://github.com/inwaar/gree-hvac-client) this fork is
+  based on
 - [tomikaa87](https://github.com/tomikaa87) for reverse-engineering the Gree protocol
 - [oroce](https://github.com/oroce) for inspiration
 - [arthurkrupa](https://github.com/arthurkrupa) for inspiration

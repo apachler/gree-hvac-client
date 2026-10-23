@@ -27,9 +27,12 @@ jobs:
     # with Contents, Issues and Pull requests read/write on this repo, stored as
     # a `release` environment secret). The built-in GITHUB_TOKEN can't bypass
     # the master ruleset (PR + required checks) on a user-owned repo; the
-    # owner's admin role can. So the job's own token only needs to read.
+    # owner's admin role can. So the job's own token only needs to read —
+    # plus OIDC + attestations to sign the release tarball's build provenance.
     permissions:
       contents: read
+      id-token: write # Sigstore signing identity for the provenance
+      attestations: write # store the attestation with the repo
     steps:
       - name: Check RELEASE_TOKEN is set
         env:
@@ -52,3 +55,34 @@ jobs:
       - run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      # semantic-release leaves HEAD on the tagged release commit when it
+      # released; on a push without a releasable commit there is no tag.
+      - name: Find the release
+        id: release
+        run: |
+          tag="$(git tag --points-at HEAD | grep '^v' | head -n 1)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      # Signed build provenance (SLSA, Sigstore) for the tarball, verifiable
+      # with `gh attestation verify <tgz> -R apachler/gree-hvac-client`.
+      - name: Attest build provenance
+        id: attest
+        if: steps.release.outputs.tag != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: pack/*.tgz
+
+      - name: Attach provenance and SBOM to the release
+        if: steps.release.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          name="gree-hvac-client-$VERSION"
+          cp "$BUNDLE" "pack/$name.tgz.sigstore.json"
+          npm sbom --omit dev --sbom-format cyclonedx > "pack/$name.cdx.json"
+          gh release upload "$TAG" --clobber "pack/$name.tgz.sigstore.json" "pack/$name.cdx.json"

@@ -5,9 +5,9 @@ Thanks for using **gree-hvac-client**! Here's where to get help.
 ## Questions & how-to
 
 - **General questions, setup help, "how do I…"** — open a
-  [GitHub Discussion](https://github.com/apachler/gree-hvac-client/discussions)
-  if Discussions are enabled, otherwise a
-  [question issue](https://github.com/apachler/gree-hvac-client/issues/new/choose).
+  [GitHub Discussion](https://github.com/apachler/gree-hvac-client/discussions).
+  Bugs and feature requests go to the
+  [issue tracker](https://github.com/apachler/gree-hvac-client/issues/new/choose).
 - **Usage** — the [README](README.md) documents every property/value and links
   the generated API reference. The [`example/`](example/) folder has runnable
   scripts (promises, async/await, polling, setting properties).

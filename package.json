@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "docs": "jsdoc2md -t README.hbs src/*.js  > README.md; echo",
+    "docs": "node scripts/docs.js",
     "audit": "npm audit --omit=dev --audit-level=high",
     "semantic-release": "semantic-release"
   },
@@ -21,9 +21,22 @@
     "example/probe.js",
     "CHANGELOG.md"
   ],
-  "keywords": [],
+  "keywords": [
+    "gree",
+    "hvac",
+    "air-conditioner",
+    "climate",
+    "ewpe",
+    "home-automation",
+    "smart-home",
+    "udp",
+    "node-red"
+  ],
   "author": "Igor Starovierov <igor.decler@gmail.com>",
-  "license": "GPL-3.0",
+  "contributors": [
+    "Andreas Pachler (https://github.com/apachler)"
+  ],
+  "license": "GPL-3.0-only",
   "dependencies": {
     "clone": "^2.1.2",
     "winston": "^3.17.0"
@@ -41,6 +54,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jsdoc": "^65.1.0",
     "eslint-plugin-prettier": "^5.5.6",
+    "fast-check": "^4.10.2",
     "globals": "^17.11.0",
     "jest": "^30.4.2",
     "jsdoc-to-markdown": "^9.1.3",

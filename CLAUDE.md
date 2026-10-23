@@ -47,7 +47,7 @@ npm run test:coverage  # Jest with coverage summary
 npm run lint           # ESLint + Prettier
 npm run lint:fix       # auto-fix
 npm run typecheck      # tsc: index.d.ts vs. the source
-npm run docs           # regenerate README.md from README.hbs + JSDoc (jsdoc2md)
+npm run docs           # regenerate README.md from README.hbs + JSDoc (scripts/docs.js)
 npm run audit          # npm audit on prod deps, fail on HIGH/CRITICAL
 
 npx jest test/connection-recovery.spec.js   # one spec file
@@ -149,6 +149,9 @@ only once every batch is answered. Query timers live on the request;
   runs the client against `test/support/fake-unit.js` over real UDP on
   127.0.0.1 (random port, real timers). Add a case there for anything that
   changes the wire format.
+- `test/fuzz.spec.js` holds fast-check property tests: arbitrary bytes, JSON
+  and encrypted packs into `_handleResponse` must only ever fail with a
+  `ClientError`. A counterexample is printed with its seed to replay.
 - Coverage floors in `jest.config.js` sit just below the actual numbers
   (≈99.8% lines): new code needs tests or `npm run test:coverage` fails.
 - Specs mock `dgram` with `test/support/socket-mock.js`. Capture only the
@@ -193,6 +196,13 @@ PAT, `release` environment) — the built-in `GITHUB_TOKEN` can't bypass ruleset
 on a user-owned repo. **When that PAT expires, releases fail** at the
 "Check RELEASE_TOKEN" step or on push; rotate the secret.
 
+After a release the same job signs build provenance for the tarball
+(`actions/attest-build-provenance`, verify with `gh attestation verify`) and
+uploads it as `<tgz>.sigstore.json`, plus a CycloneDX SBOM (`npm sbom`).
+`badges.yml` publishes the README coverage badge: it force-pushes
+`coverage.json` (a shields.io endpoint file) to the orphan `badges` branch
+via `RELEASE_TOKEN` — don't delete that branch or protect it.
+
 Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git ref
 (`github:apachler/gree-hvac-client#vX.Y.Z`) — see the README.
 
@@ -204,9 +214,11 @@ Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git re
 - `package-lock.json` and `README.md` are marked `linguist-generated` in
   `.gitattributes` — `README.md` is regenerated, don't hand-edit it.
 - Workflow triggers: CI runs on every push/PR; releases only on push to master.
-- `gh` resolves to the upstream repo (inwaar) by default: always pass
-  `-R apachler/gree-hvac-client` for PRs, checks and issues.
-- `npm run docs` ends in `; echo`, so it **exits 0 even when jsdoc2md fails**
-  and leaves a broken `README.md`. jsdoc's type parser rejects TypeScript-only
-  syntax such as optional members (`{{a?: string}}`) — use `{object}` and
-  describe the fields. Check with `npx jsdoc2md -t README.hbs src/*.js >/dev/null`.
+- With the `upstream` remote (inwaar) present, bare `gh` commands resolve to
+  the upstream repo. The SessionStart hook (`scripts/set-git-identity.sh`)
+  pins the fork as gh's default; if `gh repo set-default --view` still shows
+  inwaar, run `gh repo set-default apachler/gree-hvac-client`. Passing
+  `-R apachler/gree-hvac-client` is the safe habit either way.
+- jsdoc's type parser rejects TypeScript-only syntax such as optional members
+  (`{{a?: string}}`): use `{object}` and describe the fields. `npm run docs`
+  (`scripts/docs.js`) then fails and leaves `README.md` untouched.

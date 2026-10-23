@@ -2,9 +2,10 @@
 
 ## Supported versions
 
-Security fixes are applied to the **latest released version** on npm. Older
-versions are not maintained — please upgrade to the latest release before
-reporting an issue.
+Security fixes are applied to the **latest release** on
+[GitHub Releases](https://github.com/apachler/gree-hvac-client/releases) (this
+fork is not published to npm). Older versions are not maintained — please
+upgrade to the latest release before reporting an issue.
 
 | Version        | Supported          |
 | -------------- | ------------------ |
@@ -21,9 +22,6 @@ Instead, report them privately through GitHub's
 1. Go to the **Security** tab of the repository.
 2. Click **Report a vulnerability**.
 3. Provide a clear description, affected versions, and reproduction steps.
-
-> Maintainer setup: enable *Settings → Code security → Private vulnerability
-> reporting* so the link above is active.
 
 You can expect an initial acknowledgement within **5 business days**. Once the
 issue is confirmed and a fix is prepared, we will coordinate a release and credit
