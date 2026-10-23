@@ -5,7 +5,7 @@ on:
     branches:
       - master
 
-# Read-only by default; the release job below gets the write scopes it needs.
+# Read-only: the release job writes through RELEASE_TOKEN, not this token.
 permissions:
   contents: read
 
@@ -19,17 +19,30 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     environment: release
-    # semantic-release needs to push the release commit + tag, create the GitHub
-    # Release (with the packed .tgz asset), and comment on released issues/PRs.
+    # semantic-release pushes the release commit + tag, creates the GitHub
+    # Release (with the packed .tgz asset), and comments on released issues/PRs.
     # No npm publish — this fork ships via Git + GitHub Releases only.
+    #
+    # All of that runs as the repo owner via RELEASE_TOKEN (a fine-grained PAT
+    # with Contents, Issues and Pull requests read/write on this repo, stored as
+    # a `release` environment secret). The built-in GITHUB_TOKEN can't bypass
+    # the master ruleset (PR + required checks) on a user-owned repo; the
+    # owner's admin role can. So the job's own token only needs to read.
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
+      contents: read
     steps:
+      - name: Check RELEASE_TOKEN is set
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo "::error::RELEASE_TOKEN secret is missing from the 'release' environment"
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # semantic-release >= 25 requires Node ^22.14 || >= 24.10
@@ -38,4 +51,4 @@ jobs:
       - run: npm ci
       - run: npx semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
