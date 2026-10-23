@@ -27,6 +27,7 @@ const {
     ClientNotConnectedError,
     ClientConnectTimeoutError,
     ClientCancelConnectError,
+    ClientNoResponseError,
 } = require('./errors');
 const { createLogger } = require('./logger');
 const { randomUUID } = require('crypto');
@@ -37,6 +38,13 @@ const { randomUUID } = require('crypto');
  * @private
  */
 const DISCOVERY_TIMEOUT = 3000;
+
+/**
+ * How long getSubUnits() waits for the answer to each subList request (ms)
+ *
+ * @private
+ */
+const SUB_LIST_TIMEOUT = 2000;
 
 /**
  * Control GREE HVAC device by getting and setting its properties
@@ -56,7 +64,16 @@ class Client extends EventEmitter {
      * @property {string} name Device name as configured in the vendor app
      * @property {string} address IP-address the device answered from, usable as the `host` client option
      * @property {string} [version] Firmware version, e.g. `V1.1.13`
+     * @property {number} subUnits Number of indoor units behind it when it is the WiFi module of a multi-split outdoor unit, else `0` (list them with `getSubUnits()`)
      * @property {object} pack The full decrypted scan answer (brand, model, ...)
+     */
+
+    /**
+     * An indoor unit of a multi-split system, as listed by the outdoor unit
+     *
+     * @typedef {object} SubUnit
+     * @property {string} mac Indoor unit MAC-address, usable as the `subUnit` client option
+     * @property {string} [mid] Model id, when the outdoor unit reports one
      */
 
     /**
@@ -174,6 +191,22 @@ class Client extends EventEmitter {
          * @private
          */
         this._supportedOptionalCodes = new Set();
+
+        /**
+         * getProperties() calls waiting for the next status response
+         *
+         * @type {Array<{resolve: Function, reject: Function}>}
+         * @private
+         */
+        this._statusWaiters = [];
+
+        /**
+         * The subList request awaiting its answer (see _requestSubList)
+         *
+         * @type {{resolve: Function, timer: number}|null}
+         * @private
+         */
+        this._subListRequest = null;
 
         /**
          * @type {dgram.Socket|null}
@@ -339,6 +372,7 @@ class Client extends EventEmitter {
                     name: pack.name,
                     address: rinfo.address,
                     version: pack.ver,
+                    subUnits: Number(pack.subCnt) || 0,
                     pack,
                 });
             });
@@ -520,6 +554,7 @@ class Client extends EventEmitter {
         this._logger.info('Disconnecting');
 
         this._dispose();
+        this._rejectStatusWaiters(new ClientNotConnectedError());
 
         return new Promise((resolve, reject) => {
             if (this._socket) {
@@ -560,6 +595,7 @@ class Client extends EventEmitter {
         this._clearTimer('_socketTimeoutRef');
         this._clearTimer('_statusTimeoutRef');
         this._clearTimer('_bindTimeoutRef');
+        this._settleSubList(null);
     }
 
     /**
@@ -606,6 +642,8 @@ class Client extends EventEmitter {
             opt: Object.keys(vendorProperties),
             p: Object.values(vendorProperties),
             t: 'cmd',
+            // A multi-split gateway relays the command to this indoor unit
+            ...(this._options.subUnit && { sub: this._options.subUnit }),
         });
     }
 
@@ -632,6 +670,151 @@ class Client extends EventEmitter {
         const properties = {};
         properties[property] = value;
         return this.setProperties(properties);
+    }
+
+    /**
+     * Ask the device for its current properties now, instead of waiting for
+     * the next poll
+     *
+     * @returns {Promise<PropertyMap>} all the properties, once the device answered
+     * @throws {ClientNotConnectedError} when not connected (yet), or disconnected before the answer
+     * @throws {ClientNoResponseError} when the device did not answer within `pollingTimeout`
+     * @example
+     * await client.connect();
+     * const properties = await client.getProperties();
+     * console.log(properties.temperature, properties.currentTemperature);
+     */
+    getProperties() {
+        if (!this._bound || !this._socket) {
+            return Promise.reject(new ClientNotConnectedError());
+        }
+
+        return new Promise((resolve, reject) => {
+            this._statusWaiters.push({ resolve, reject });
+            this._requestStatus().catch(error =>
+                this._rejectStatusWaiters(error)
+            );
+        });
+    }
+
+    /**
+     * List the indoor units of a multi-split system. Connect to the outdoor
+     * unit's WiFi module (a device that `discover()` reports with
+     * `subUnits` > 0), then pass one of the listed MACs as the `subUnit`
+     * option of a client per indoor unit.
+     *
+     * @param {object} [options]
+     * @param {number} [options.timeout] How long to wait for each of the two request forms (ms), 2000 by default
+     * @returns {Promise<SubUnit[]>} empty when the device is no multi-split gateway
+     * @throws {ClientNotConnectedError} when not connected (yet)
+     * @example
+     * const gateway = new Gree.Client({host: '192.168.1.42', poll: false});
+     * gateway.on('connect', async () => {
+     *     const units = await gateway.getSubUnits();
+     *     // [{mac: 'c0000001a2b3c4', mid: '...'}, ...]
+     *     const bedroom = new Gree.Client({host: '192.168.1.42', subUnit: units[0].mac});
+     * });
+     */
+    async getSubUnits({ timeout = SUB_LIST_TIMEOUT } = {}) {
+        // Modules differ in which form they answer: the device-key form, or
+        // the classic generic-key form (AES-ECB modules only).
+        const forms = this._encryptionService.isGcm()
+            ? ['device']
+            : ['device', 'generic'];
+
+        for (const form of forms) {
+            if (!this._bound || !this._socket) {
+                throw new ClientNotConnectedError();
+            }
+            const list = await this._requestSubList(form, timeout);
+            if (list) {
+                const units = new Map();
+                for (const unit of list) {
+                    if (unit && unit.mac && !units.has(String(unit.mac))) {
+                        units.set(String(unit.mac), {
+                            ...unit,
+                            mac: String(unit.mac),
+                        });
+                    }
+                }
+                return [...units.values()];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Send one form of the subList request and wait for its answer
+     *
+     * @param {'device'|'generic'} form
+     * @param {number} timeout
+     * @returns {Promise<object[]|null>} the listed units, or null without an answer
+     * @private
+     */
+    async _requestSubList(form, timeout) {
+        // One request at a time: the answer carries no request id.
+        this._settleSubList(null);
+
+        const answer = new Promise(resolve => {
+            this._subListRequest = {
+                resolve,
+                timer: setTimeout(() => this._settleSubList(null), timeout),
+            };
+        });
+
+        this._logger.info('Sub-unit list request', { form });
+        try {
+            if (form === 'device') {
+                await this._sendRequest(
+                    { mac: this._cid, t: 'subList', i: 0 },
+                    { tcid: this._cid }
+                );
+            } else {
+                const encrypted = this._encryptionService.encryptGeneric({
+                    mac: this._cid,
+                    i: 1,
+                });
+                await this._socketSend({
+                    cid: 'app',
+                    i: 1,
+                    t: 'subList',
+                    tcid: this._cid,
+                    uid: 0,
+                    pack: encrypted.payload,
+                });
+            }
+        } catch (error) {
+            this._settleSubList(null);
+            throw error;
+        }
+
+        return answer;
+    }
+
+    /**
+     * Settle the pending subList request, if any
+     *
+     * @param {object[]|null} list
+     * @private
+     */
+    _settleSubList(list) {
+        const request = this._subListRequest;
+        if (request) {
+            this._subListRequest = null;
+            clearTimeout(request.timer);
+            request.resolve(list);
+        }
+    }
+
+    /**
+     * @param {Error} error
+     * @private
+     */
+    _rejectStatusWaiters(error) {
+        const waiters = this._statusWaiters;
+        this._statusWaiters = [];
+        waiters.forEach(waiter => waiter.reject(error));
     }
 
     /**
@@ -741,9 +924,10 @@ class Client extends EventEmitter {
      * @param {string[]} message.opt
      * @param {number[]} message.p
      * @param {string} message.t
+     * @param {object} [envelope] extra fields of the enclosing message
      * @private
      */
-    async _sendRequest(message) {
+    async _sendRequest(message, envelope = {}) {
         this._logger.debug('Send request', { request: message });
 
         const encrypted = this._encryptionService.encrypt(message);
@@ -752,9 +936,21 @@ class Client extends EventEmitter {
             i: 0,
             t: 'pack',
             uid: 0,
+            // A multi-split gateway routes by tcid; the pack names the indoor unit
+            ...(this._options.subUnit && { tcid: this._cid }),
+            ...envelope,
             pack: encrypted.payload,
             tag: encrypted.tag,
         });
+    }
+
+    /**
+     * @returns {string|null} MAC a status request names: the indoor unit's
+     *     with the `subUnit` option, else the device's
+     * @private
+     */
+    _statusMac() {
+        return this._options.subUnit || this._cid;
     }
 
     /**
@@ -771,7 +967,7 @@ class Client extends EventEmitter {
 
         await this._sendRequest({
             cols: this._transformer.statusColumns(this._supportedOptionalCodes),
-            mac: this._cid,
+            mac: this._statusMac(),
             t: 'status',
         });
     }
@@ -791,7 +987,7 @@ class Client extends EventEmitter {
             this._logger.debug('Probe optional property', { code });
             await this._sendRequest({
                 cols: [code],
-                mac: this._cid,
+                mac: this._statusMac(),
                 t: 'status',
             });
         }
@@ -823,6 +1019,7 @@ class Client extends EventEmitter {
 
             this._properties = {};
             this._noResponseCount++;
+            this._rejectStatusWaiters(new ClientNoResponseError());
             this.emit('no_response', this);
 
             this._rebindIfUnresponsive();
@@ -879,6 +1076,11 @@ class Client extends EventEmitter {
             const late = this._bound
                 ? this._encryptionService.decryptGeneric(message)
                 : null;
+            // ...as is the answer to the generic-key subList request
+            if (late && Array.isArray(late.list)) {
+                this._handleSubListResponse(late);
+                return;
+            }
             if (late && ['dev', 'bindok'].includes(late.t)) {
                 this._logger.debug('Late scan/bind response, ignoring', {
                     t: late.t,
@@ -911,6 +1113,12 @@ class Client extends EventEmitter {
             // If package type is response, update device properties
             if (pack.t === 'res') {
                 this._handleUpdateConfirmResponse(pack);
+                return;
+            }
+
+            // Multi-split indoor unit list
+            if (Array.isArray(pack.list)) {
+                this._handleSubListResponse(pack);
                 return;
             }
         }
@@ -1088,6 +1296,29 @@ class Client extends EventEmitter {
             this._noResponseCount = 0;
         }
 
+        try {
+            this._applyStatus(pack);
+        } finally {
+            if (!probe) {
+                const waiters = this._statusWaiters;
+                this._statusWaiters = [];
+                const properties = this._transformer.fromVendor(
+                    this._properties,
+                    this._properties
+                );
+                waiters.forEach(waiter => waiter.resolve(properties));
+            }
+        }
+    }
+
+    /**
+     * Take over the values of a status response and report the changed ones
+     *
+     * @param pack
+     * @fires Client#update
+     * @private
+     */
+    _applyStatus(pack) {
         // Guard against malformed packets: some firmwares occasionally return a
         // status without the expected parallel `cols`/`dat` arrays. Iterating
         // them blindly used to throw and (when unhandled) crash the host
@@ -1149,6 +1380,19 @@ class Client extends EventEmitter {
                 this
             );
         }
+    }
+
+    /**
+     * Handle the answer to a subList request
+     *
+     * @param {object} pack
+     * @private
+     */
+    _handleSubListResponse(pack) {
+        this._logger.info('Sub-unit list response', {
+            count: pack.list.length,
+        });
+        this._settleSubList(pack.list);
     }
 
     /**
@@ -1226,4 +1470,6 @@ module.exports = {
     Client,
     PROPERTY,
     VALUE: PROPERTY_VALUE,
+    // the error classes, for `instanceof` checks
+    ...require('./errors'),
 };

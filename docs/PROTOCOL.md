@@ -56,6 +56,33 @@ attempt (see [`src/encryption-service.js`](../src/encryption-service.js)).
   network, each with its own `dev` reply (`cid`/`mac`, `name`, firmware `ver`,
   brand, model). `Client.discover()` collects them; some firmwares leave
   `cid`/`mac` empty in the `dev` pack and only the envelope's `cid` has it.
+  A multi-split gateway adds `subCnt`, the number of its indoor units.
+
+## Multi-split systems
+
+On a multi-split (VRF) system the WiFi module of the outdoor unit is the only
+device on the network — the gateway. It is scanned and bound like any unit and
+reports `subCnt` > 0 in its `dev` reply. The format below follows the
+[Home Assistant Gree integration](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent)
+(`gree_protocol.py`, `climate.py`) and
+[greeclimate#148](https://github.com/cmroche/greeclimate/pull/148); this
+project has not verified it on hardware.
+
+| Step | Client → Gateway | Gateway → Client |
+| ---- | ---------------- | ---------------- |
+| **List indoor units** | envelope `t:"pack"`, `i:0`, `tcid:<gateway>`; `pack` ⇒ `{t:"subList", mac:<gateway>, i:0}` (device key) | `pack` ⇒ `{t:"subList", c, list:[{mac, mid?}, ...]}` (device key) |
+| ↳ fallback (AES-ECB modules) | envelope `t:"subList"`, `i:1`, `tcid:<gateway>`; `pack` ⇒ `{mac:<gateway>, i:1}` (generic key) | `pack` ⇒ `{list:[...]}` (generic key) |
+| **Status** | envelope `tcid:<gateway>`; `pack` ⇒ `{t:"status", mac:<indoor unit>, cols}` | `dat` as usual |
+| **Set** | envelope `tcid:<gateway>`; `pack` ⇒ `{t:"cmd", opt, p, sub:<indoor unit>}` | `res` as usual |
+
+Modules differ in which form of the list request they answer, so
+`getSubUnits()` tries the device-key form and then (on AES-ECB modules) the
+generic-key one. With the `subUnit` option the client addresses status and
+set requests to that indoor unit as above. Indoor-unit MACs can be longer
+than 12 hex digits. Upstream
+[inwaar#30](https://github.com/inwaar/gree-hvac-client/issues/30) reports a
+gateway that answered status requests carrying the indoor unit in `sub`
+(instead of the pack `mac`) with zeros, while commands worked.
 
 ## Envelope format
 
@@ -108,10 +135,15 @@ Friendly name ⇄ vendor code mapping and value enums, as exposed by
 | `outdoorTemperature` | `OutEnvTem` | integer, `−40` offset | **Read-only** outdoor-unit sensor in °C. `0` = unsupported. Optional. |
 | `humidity` | `DwatSen` | integer % | **Read-only** indoor relative humidity. Optional. |
 | `errorCode` | `AllErr` | integer | **Read-only** fault code, `0` = no fault. Optional. |
+| `targetHumidity` | `Dwet` | integer % | Dehumidifier target humidity. Optional. |
+| `waterFull` | `DwatFul` | off→0, on→1 | **Read-only** dehumidifier water tank full. Optional. |
+| `cleanFilter` | `Dfltr` | off→0, on→1 | **Read-only** dehumidifier filter needs cleaning. Optional. |
 
 ### Optional properties
 
-`antiDirectBlow`, `outdoorTemperature`, `humidity` and `errorCode` exist only
+`antiDirectBlow`, `outdoorTemperature`, `humidity`, `errorCode` and the
+dehumidifier codes (`targetHumidity`, `waterFull`, `cleanFilter`; names from
+[greeclimate](https://github.com/cmroche/greeclimate)'s `Props`) exist only
 on some units. A unit without the feature may answer a status request for one
 of these codes with an empty `dat`, so the client doesn't put them in every
 poll: after each bind it sends one `status` request per code, and polls a code

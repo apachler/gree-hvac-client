@@ -8,6 +8,7 @@
  * @property {string} host=192.168.1.255 - GREE device ip-address
  * @property {number} port=7000 - GREE device UDP port
  * @property {string|null} mac=null - Only bind to the device with this MAC-address (`cid`), with or without colons. Recommended when `host` is a broadcast address: the device is then rediscovered by its MAC on every reconnect, so a DHCP address change is followed automatically.
+ * @property {string|null} subUnit=null - Control one indoor unit of a multi-split system: its MAC as listed by `getSubUnits()`. `host`/`mac` then address the outdoor unit's WiFi module (the gateway), which relays status and set requests to this indoor unit.
  * @property {number} connectTimeout=3000 - Reconnect to device if no success timeout
  * @property {number} reconnectMaxDelay=30000 - Upper bound for the reconnect back-off: each consecutive failed attempt doubles the wait (starting at `connectTimeout`) up to this value. Set it to `connectTimeout` to retry at a fixed rate.
  * @property {number} bindTimeout=1000 - Wait for a bind confirmation before retrying the bind with the other cipher (AES-GCM)
@@ -24,6 +25,7 @@ const CLIENT_OPTIONS = {
     host: '192.168.1.255',
     port: 7000,
     mac: null,
+    subUnit: null,
     connectTimeout: 3000,
     reconnectMaxDelay: 30000,
     bindTimeout: 1000,
@@ -46,6 +48,7 @@ const ENV_OPTIONS = {
     host: 'GREE_HVAC_HOST',
     port: 'GREE_HVAC_PORT',
     mac: 'GREE_HVAC_MAC',
+    subUnit: 'GREE_HVAC_SUB_UNIT',
     connectTimeout: 'GREE_HVAC_CONNECT_TIMEOUT',
     reconnectMaxDelay: 'GREE_HVAC_RECONNECT_MAX_DELAY',
     bindTimeout: 'GREE_HVAC_BIND_TIMEOUT',

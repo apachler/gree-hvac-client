@@ -25,13 +25,13 @@ self-contained npm tarball; needs no git, no build step, ideal for Docker /
 air-gapped builds):
 
 ```shell
-npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz
+npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.3.0/gree-hvac-client-4.3.0.tgz
 ```
 
 **Or install the Git ref** (npm clones the repo at the tag):
 
 ```shell
-npm install github:apachler/gree-hvac-client#v4.2.0
+npm install github:apachler/gree-hvac-client#v4.3.0
 ```
 
 Either way you can pin it in `package.json`:
@@ -39,7 +39,7 @@ Either way you can pin it in `package.json`:
 ```json
 {
   "dependencies": {
-    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz"
+    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.3.0/gree-hvac-client-4.3.0.tgz"
   }
 }
 ```
@@ -86,9 +86,64 @@ Find devices on the network:
 const Gree = require('gree-hvac-client');
 
 Gree.Client.discover({host: '192.168.7.255'}).then(devices => {
-    // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.7.60', version: 'V1.1.13', pack: {...}}]
+    // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.7.60', version: 'V1.1.13', subUnits: 0, pack: {...}}]
     console.log(devices);
 });
+```
+
+Read the current state on demand (instead of waiting for the next poll):
+
+```javascript
+const client = new Gree.Client({host: '192.168.7.60', autoConnect: false, poll: false});
+client.on('error', error => console.error(error.message));
+
+await client.connect();
+const properties = await client.getProperties();
+console.log(properties.temperature, properties.currentTemperature);
+```
+
+`getProperties()` rejects with `ClientNoResponseError` when the unit does not
+answer within `pollingTimeout`. The error classes are exported
+(`Gree.ClientNoResponseError`, ...) for `instanceof` checks.
+
+### Multi-split systems
+
+On a multi-split system one WiFi module in the outdoor unit (the gateway)
+serves several indoor units; `discover()` reports it with `subUnits` > 0.
+List the indoor units, then create one client per indoor unit with the
+`subUnit` option — `host` stays the gateway's address:
+
+```javascript
+const gateway = new Gree.Client({host: '192.168.7.70', poll: false});
+gateway.on('connect', async () => {
+    const units = await gateway.getSubUnits(); // [{mac: 'c0000001a2b3c4'}, ...]
+    await gateway.disconnect();
+
+    const bedroom = new Gree.Client({host: '192.168.7.70', subUnit: units[0].mac});
+    bedroom.on('update', (updated, properties) => console.log(properties));
+});
+```
+
+> Not verified on hardware by this project: the message format follows the
+> [Home Assistant Gree integration](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent),
+> and some gateways are reported to answer status requests for indoor units
+> with zeros (upstream [inwaar#30](https://github.com/inwaar/gree-hvac-client/issues/30)).
+> Run `example/probe.js` against your gateway and report what you see.
+
+### TypeScript
+
+Type definitions ship with the package (`index.d.ts`): property names, their
+values, events, options and errors are typed, and `setProperty` rejects
+read-only properties and unknown values at compile time.
+
+### Check your unit
+
+`example/probe.js` connects to one unit and prints every vendor code it
+reports, raw and decoded, which optional sensors it answered and its indoor
+units — handy to check a value that looks wrong, and to attach to an issue:
+
+```shell
+node node_modules/gree-hvac-client/example/probe.js 192.168.7.60
 ```
 
 ### Connection loss and reconnect
@@ -144,6 +199,9 @@ client.on('error', error => console.error(error.message));
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
 | **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
+| **targetHumidity** | any integer | Target relative humidity in % (dehumidifiers, optional) |
+| **waterFull** | _off_, _on_ | Water tank is full. (Read-only, dehumidifiers, optional) |
+| **cleanFilter** | _off_, _on_ | Filter needs cleaning. (Read-only, dehumidifiers, optional) |
 
 _Optional_ properties exist only on some units: the client probes for them
 after connecting and only reports the ones the unit answers. To stop the unit
@@ -177,6 +235,7 @@ cd gree-hvac-client
 npm install        # also installs the git hook (pre-push lint)
 npm test           # Jest unit tests
 npm run lint       # ESLint + Prettier
+npm run typecheck  # check index.d.ts against the source
 npm run docs       # regenerate README.md from README.hbs
 ```
 

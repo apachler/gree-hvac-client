@@ -62,6 +62,10 @@
  * @property {string} safetyHeating.on
  * @property {string} antiDirectBlow.off
  * @property {string} antiDirectBlow.on
+ * @property {string} waterFull.off
+ * @property {string} waterFull.on
+ * @property {string} cleanFilter.off
+ * @property {string} cleanFilter.on
  * @private
  */
 const PROPERTY_VALUE = {
@@ -161,6 +165,15 @@ const PROPERTY_VALUE = {
     outdoorTemperature: {},
     humidity: {},
     errorCode: {},
+    targetHumidity: {},
+    waterFull: {
+        off: 0,
+        on: 1,
+    },
+    cleanFilter: {
+        off: 0,
+        on: 1,
+    },
 };
 
 module.exports = {

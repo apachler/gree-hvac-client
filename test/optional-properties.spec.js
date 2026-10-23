@@ -44,14 +44,31 @@ describe('Optional properties', () => {
             });
         });
 
-        it.each(['outdoorTemperature', 'humidity', 'errorCode'])(
-            'refuses to set read-only %s',
-            property => {
-                expect(() => SUT.toVendor({ [property]: 1 })).toThrow(
-                    `Cannot set read-only property ${property}`
-                );
-            }
-        );
+        it('decodes the dehumidifier codes', () => {
+            expect(SUT.fromVendor({ Dwet: 55, DwatFul: 1, Dfltr: 0 })).toEqual({
+                targetHumidity: 55,
+                waterFull: 'on',
+                cleanFilter: 'off',
+            });
+        });
+
+        it('sets targetHumidity', () => {
+            expect(SUT.toVendor({ targetHumidity: 50 })).toEqual({
+                Dwet: 50,
+            });
+        });
+
+        it.each([
+            'outdoorTemperature',
+            'humidity',
+            'errorCode',
+            'waterFull',
+            'cleanFilter',
+        ])('refuses to set read-only %s', property => {
+            expect(() => SUT.toVendor({ [property]: 1 })).toThrow(
+                `Cannot set read-only property ${property}`
+            );
+        });
 
         it('sets antiDirectBlow', () => {
             expect(SUT.toVendor({ antiDirectBlow: 'on' })).toEqual({

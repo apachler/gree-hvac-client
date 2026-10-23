@@ -6,15 +6,19 @@
     "prepare": "git config core.hooksPath .githooks || true",
     "lint": "eslint ./",
     "lint:fix": "eslint --fix ./",
+    "typecheck": "tsc -p tsconfig.json",
     "test": "jest",
     "test:coverage": "jest --coverage",
     "docs": "jsdoc2md -t README.hbs src/*.js  > README.md; echo",
     "audit": "npm audit --omit=dev --audit-level=high",
     "semantic-release": "semantic-release"
   },
+  "types": "index.d.ts",
   "files": [
     "src",
     "index.js",
+    "index.d.ts",
+    "example/probe.js",
     "CHANGELOG.md"
   ],
   "keywords": [],
@@ -32,6 +36,7 @@
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/git": "^11.0.1",
     "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.43",
     "eslint": "^10.8.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-jsdoc": "^65.1.0",
@@ -40,7 +45,8 @@
     "jest": "^30.4.2",
     "jsdoc-to-markdown": "^9.1.3",
     "prettier": "^3.8.3",
-    "semantic-release": "^25.0.9"
+    "semantic-release": "^25.0.9",
+    "typescript": "^5.9.3"
   },
   "repository": {
     "type": "git",

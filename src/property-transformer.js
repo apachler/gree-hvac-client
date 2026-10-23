@@ -23,6 +23,9 @@ const PROPERTY_VENDOR_CODES = {
     outdoorTemperature: 'OutEnvTem',
     humidity: 'DwatSen',
     errorCode: 'AllErr',
+    targetHumidity: 'Dwet',
+    waterFull: 'DwatFul',
+    cleanFilter: 'Dfltr',
 };
 
 /**
@@ -38,6 +41,9 @@ const OPTIONAL_VENDOR_CODES = [
     'OutEnvTem',
     'DwatSen',
     'AllErr',
+    'Dwet',
+    'DwatFul',
+    'Dfltr',
 ];
 
 /**
@@ -179,6 +185,8 @@ const PROPERTY_VALUE_TRANSFORMERS = {
     ),
     humidity: readOnly('humidity'),
     errorCode: readOnly('errorCode'),
+    waterFull: readOnly('waterFull'),
+    cleanFilter: readOnly('cleanFilter'),
 };
 
 const NOOP_PROPERTY_VALUE_TRANSFORMER = {

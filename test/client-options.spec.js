@@ -25,6 +25,7 @@ describe('Client options', () => {
               "port": 1234,
               "reconnectMaxDelay": 30000,
               "silent": false,
+              "subUnit": null,
             }
         `);
     });

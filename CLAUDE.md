@@ -13,6 +13,7 @@ on. Pure library: no CLI, no server, no UI.
 
 ```
 index.js                     entry — re-exports src/client
+index.d.ts                   hand-written TypeScript types (`npm run typecheck` checks them)
 src/
   client.js                  the Client class: discover/bind/poll, get/set properties (EventEmitter)
   client-options.js          option defaults + GREE_HVAC_* env overrides
@@ -28,7 +29,11 @@ example/                     runnable usage scripts (promises, async-await, poll
 README.hbs                   Handlebars template; README.md is GENERATED from it
 ```
 
-Public API (`require('gree-hvac-client')`): `Client`, `PROPERTY`, `VALUE`.
+Public API (`require('gree-hvac-client')`): `Client`, `PROPERTY`, `VALUE`, and
+the error classes from `src/errors.js`. **Changing the API or adding a
+property/option/error means updating `index.d.ts` too**; `npm run typecheck`
+(CI lint job) fails when its `PROPERTY`/`VALUE` keys drift from the source,
+and `test/types/usage.ts` holds the compile-time usage checks.
 
 ## Daily commands
 
@@ -37,6 +42,7 @@ npm test               # Jest unit tests
 npm run test:coverage  # Jest with coverage summary
 npm run lint           # ESLint + Prettier
 npm run lint:fix       # auto-fix
+npm run typecheck      # tsc: index.d.ts vs. the source
 npm run docs           # regenerate README.md from README.hbs + JSDoc (jsdoc2md)
 npm run audit          # npm audit on prod deps, fail on HIGH/CRITICAL
 
@@ -78,6 +84,15 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   probed once per bind and polled only if answered — a probe reply must not
   count as a poll reply.
 - `Client.discover()` is static and opens its own socket (no bind).
+- `getProperties()` waiters resolve on the next non-probe status reply and
+  reject on `no_response` / `disconnect()`. `getSubUnits()` keeps one pending
+  `subList` request in `_subListRequest` (its timer is not one of the four
+  refs below; `_dispose()` settles it).
+- Multi-split (`subUnit` option): envelope gets `tcid:<gateway cid>`, status
+  packs name the indoor unit in `mac`, cmd packs in `sub`. Unverified on
+  hardware — see docs/PROTOCOL.md.
+- `example/probe.js` ships in the package (hardware check for users); it reads
+  client internals on purpose.
 - **Adding an option** touches `CLIENT_OPTIONS` + `ENV_OPTIONS` in
   `client-options.js` (env strings are coerced to the default's type),
   `.env.example`, the inline snapshot in `test/client-options.spec.js`, then

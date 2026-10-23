@@ -25,13 +25,13 @@ self-contained npm tarball; needs no git, no build step, ideal for Docker /
 air-gapped builds):
 
 ```shell
-npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz
+npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.3.0/gree-hvac-client-4.3.0.tgz
 ```
 
 **Or install the Git ref** (npm clones the repo at the tag):
 
 ```shell
-npm install github:apachler/gree-hvac-client#v4.2.0
+npm install github:apachler/gree-hvac-client#v4.3.0
 ```
 
 Either way you can pin it in `package.json`:
@@ -39,7 +39,7 @@ Either way you can pin it in `package.json`:
 ```json
 {
   "dependencies": {
-    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz"
+    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.3.0/gree-hvac-client-4.3.0.tgz"
   }
 }
 ```
@@ -86,9 +86,64 @@ Find devices on the network:
 const Gree = require('gree-hvac-client');
 
 Gree.Client.discover({host: '192.168.7.255'}).then(devices => {
-    // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.7.60', version: 'V1.1.13', pack: {...}}]
+    // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.7.60', version: 'V1.1.13', subUnits: 0, pack: {...}}]
     console.log(devices);
 });
+```
+
+Read the current state on demand (instead of waiting for the next poll):
+
+```javascript
+const client = new Gree.Client({host: '192.168.7.60', autoConnect: false, poll: false});
+client.on('error', error => console.error(error.message));
+
+await client.connect();
+const properties = await client.getProperties();
+console.log(properties.temperature, properties.currentTemperature);
+```
+
+`getProperties()` rejects with `ClientNoResponseError` when the unit does not
+answer within `pollingTimeout`. The error classes are exported
+(`Gree.ClientNoResponseError`, ...) for `instanceof` checks.
+
+### Multi-split systems
+
+On a multi-split system one WiFi module in the outdoor unit (the gateway)
+serves several indoor units; `discover()` reports it with `subUnits` > 0.
+List the indoor units, then create one client per indoor unit with the
+`subUnit` option — `host` stays the gateway's address:
+
+```javascript
+const gateway = new Gree.Client({host: '192.168.7.70', poll: false});
+gateway.on('connect', async () => {
+    const units = await gateway.getSubUnits(); // [{mac: 'c0000001a2b3c4'}, ...]
+    await gateway.disconnect();
+
+    const bedroom = new Gree.Client({host: '192.168.7.70', subUnit: units[0].mac});
+    bedroom.on('update', (updated, properties) => console.log(properties));
+});
+```
+
+> Not verified on hardware by this project: the message format follows the
+> [Home Assistant Gree integration](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent),
+> and some gateways are reported to answer status requests for indoor units
+> with zeros (upstream [inwaar#30](https://github.com/inwaar/gree-hvac-client/issues/30)).
+> Run `example/probe.js` against your gateway and report what you see.
+
+### TypeScript
+
+Type definitions ship with the package (`index.d.ts`): property names, their
+values, events, options and errors are typed, and `setProperty` rejects
+read-only properties and unknown values at compile time.
+
+### Check your unit
+
+`example/probe.js` connects to one unit and prints every vendor code it
+reports, raw and decoded, which optional sensors it answered and its indoor
+units — handy to check a value that looks wrong, and to attach to an issue:
+
+```shell
+node node_modules/gree-hvac-client/example/probe.js 192.168.7.60
 ```
 
 ### Connection loss and reconnect
@@ -144,6 +199,9 @@ client.on('error', error => console.error(error.message));
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
 | **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
+| **targetHumidity** | any integer | Target relative humidity in % (dehumidifiers, optional) |
+| **waterFull** | _off_, _on_ | Water tank is full. (Read-only, dehumidifiers, optional) |
+| **cleanFilter** | _off_, _on_ | Filter needs cleaning. (Read-only, dehumidifiers, optional) |
 
 _Optional_ properties exist only on some units: the client probes for them
 after connecting and only reports the ones the unit answers. To stop the unit
@@ -193,6 +251,9 @@ Note: This command may vary depending on your OS (e.g. Linux, macOS, CygWin). If
 <dt><a href="#ClientCancelConnectError">ClientCancelConnectError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
 <dd><p>Connecting was cancelled by calling disconnect</p>
 </dd>
+<dt><a href="#ClientNoResponseError">ClientNoResponseError</a> ⇐ <code><a href="#ClientError">ClientError</a></code></dt>
+<dd><p>The HVAC did not answer a status request within <code>pollingTimeout</code></p>
+</dd>
 </dl>
 
 ## Constants
@@ -217,6 +278,9 @@ Note: This command may vary depending on your OS (e.g. Linux, macOS, CygWin). If
 <dt><a href="#DiscoveredDevice">DiscoveredDevice</a> : <code>object</code></dt>
 <dd><p>A device that answered a discovery scan</p>
 </dd>
+<dt><a href="#SubUnit">SubUnit</a> : <code>object</code></dt>
+<dd><p>An indoor unit of a multi-split system, as listed by the outdoor unit</p>
+</dd>
 </dl>
 
 <a name="Client"></a>
@@ -235,6 +299,8 @@ Control GREE HVAC device by getting and setting its properties
         * [.disconnect()](#Client+disconnect) ⇒ <code>Promise</code>
         * [.setProperties(properties)](#Client+setProperties) ⇒ <code>Promise</code>
         * [.setProperty(property, value)](#Client+setProperty) ⇒ <code>Promise</code>
+        * [.getProperties()](#Client+getProperties) ⇒ [<code>Promise.&lt;PropertyMap&gt;</code>](#PropertyMap)
+        * [.getSubUnits([options])](#Client+getSubUnits) ⇒ <code>Promise.&lt;Array.&lt;SubUnit&gt;&gt;</code>
         * [.getDeviceId()](#Client+getDeviceId) ⇒ <code>string</code> \| <code>null</code>
         * ~~[.setDebug(enable)](#Client+setDebug)~~
         * ["connect"](#Client+event_connect)
@@ -340,6 +406,54 @@ client.setProperty(Gree.PROPERTY.temperature, 25);
 
 client.setProperty('swingHor', 'fixedLeft');
 client.setProperty('temperature', 25);
+```
+<a name="Client+getProperties"></a>
+
+### client.getProperties() ⇒ [<code>Promise.&lt;PropertyMap&gt;</code>](#PropertyMap)
+Ask the device for its current properties now, instead of waiting for
+the next poll
+
+**Kind**: instance method of [<code>Client</code>](#Client)  
+**Returns**: [<code>Promise.&lt;PropertyMap&gt;</code>](#PropertyMap) - all the properties, once the device answered  
+**Throws**:
+
+- [<code>ClientNotConnectedError</code>](#ClientNotConnectedError) when not connected (yet), or disconnected before the answer
+- [<code>ClientNoResponseError</code>](#ClientNoResponseError) when the device did not answer within `pollingTimeout`
+
+**Example**  
+```js
+await client.connect();
+const properties = await client.getProperties();
+console.log(properties.temperature, properties.currentTemperature);
+```
+<a name="Client+getSubUnits"></a>
+
+### client.getSubUnits([options]) ⇒ <code>Promise.&lt;Array.&lt;SubUnit&gt;&gt;</code>
+List the indoor units of a multi-split system. Connect to the outdoor
+unit's WiFi module (a device that `discover()` reports with
+`subUnits` > 0), then pass one of the listed MACs as the `subUnit`
+option of a client per indoor unit.
+
+**Kind**: instance method of [<code>Client</code>](#Client)  
+**Returns**: <code>Promise.&lt;Array.&lt;SubUnit&gt;&gt;</code> - empty when the device is no multi-split gateway  
+**Throws**:
+
+- [<code>ClientNotConnectedError</code>](#ClientNotConnectedError) when not connected (yet)
+
+
+| Param | Type | Description |
+| --- | --- | --- |
+| [options] | <code>object</code> |  |
+| [options.timeout] | <code>number</code> | How long to wait for each of the two request forms (ms), 2000 by default |
+
+**Example**  
+```js
+const gateway = new Gree.Client({host: '192.168.1.42', poll: false});
+gateway.on('connect', async () => {
+    const units = await gateway.getSubUnits();
+    // [{mac: 'c0000001a2b3c4', mid: '...'}, ...]
+    const bedroom = new Gree.Client({host: '192.168.1.42', subUnit: units[0].mac});
+});
 ```
 <a name="Client+getDeviceId"></a>
 
@@ -559,6 +673,13 @@ Connecting was cancelled by calling disconnect
 
 **Kind**: global class  
 **Extends**: [<code>ClientError</code>](#ClientError)  
+<a name="ClientNoResponseError"></a>
+
+## ClientNoResponseError ⇐ [<code>ClientError</code>](#ClientError)
+The HVAC did not answer a status request within `pollingTimeout`
+
+**Kind**: global class  
+**Extends**: [<code>ClientError</code>](#ClientError)  
 <a name="CLIENT_OPTIONS"></a>
 
 ## CLIENT\_OPTIONS : <code>object</code>
@@ -573,6 +694,7 @@ Client options
 | host | <code>string</code> | <code>&quot;192.168.1.255&quot;</code> | GREE device ip-address |
 | port | <code>number</code> | <code>7000</code> | GREE device UDP port |
 | mac | <code>string</code> \| <code>null</code> | <code>null</code> | Only bind to the device with this MAC-address (`cid`), with or without colons. Recommended when `host` is a broadcast address: the device is then rediscovered by its MAC on every reconnect, so a DHCP address change is followed automatically. |
+| subUnit | <code>string</code> \| <code>null</code> | <code>null</code> | Control one indoor unit of a multi-split system: its MAC as listed by `getSubUnits()`. `host`/`mac` then address the outdoor unit's WiFi module (the gateway), which relays status and set requests to this indoor unit. |
 | connectTimeout | <code>number</code> | <code>3000</code> | Reconnect to device if no success timeout |
 | reconnectMaxDelay | <code>number</code> | <code>30000</code> | Upper bound for the reconnect back-off: each consecutive failed attempt doubles the wait (starting at `connectTimeout`) up to this value. Set it to `connectTimeout` to retry at a fixed rate. |
 | bindTimeout | <code>number</code> | <code>1000</code> | Wait for a bind confirmation before retrying the bind with the other cipher (AES-GCM) |
@@ -654,6 +776,10 @@ Device properties value constants
 | safetyHeating.on | <code>string</code> |  |
 | antiDirectBlow.off | <code>string</code> |  |
 | antiDirectBlow.on | <code>string</code> |  |
+| waterFull.off | <code>string</code> |  |
+| waterFull.on | <code>string</code> |  |
+| cleanFilter.off | <code>string</code> |  |
+| cleanFilter.on | <code>string</code> |  |
 
 <a name="PROPERTY"></a>
 
@@ -687,6 +813,9 @@ Device properties constants
 | outdoorTemperature | <code>string</code> | Get the outdoor unit's temperature sensor in °C (read-only; `0` when the unit has no such sensor) |
 | humidity | <code>string</code> | Get the indoor relative humidity in % (read-only; only units with a humidity sensor report it) |
 | errorCode | <code>string</code> | Get the unit's fault code, `0` when there is no fault (read-only) |
+| targetHumidity | <code>string</code> | Target relative humidity in % (dehumidifiers only) |
+| waterFull | <code>string</code> | Get whether the water tank is full (read-only, dehumidifiers only) |
+| cleanFilter | <code>string</code> | Get whether the filter needs cleaning (read-only, dehumidifiers only) |
 
 <a name="PropertyMap"></a>
 
@@ -706,7 +835,21 @@ A device that answered a discovery scan
 | name | <code>string</code> | Device name as configured in the vendor app |
 | address | <code>string</code> | IP-address the device answered from, usable as the `host` client option |
 | [version] | <code>string</code> | Firmware version, e.g. `V1.1.13` |
+| subUnits | <code>number</code> | Number of indoor units behind it when it is the WiFi module of a multi-split outdoor unit, else `0` (list them with `getSubUnits()`) |
 | pack | <code>object</code> | The full decrypted scan answer (brand, model, ...) |
+
+<a name="SubUnit"></a>
+
+## SubUnit : <code>object</code>
+An indoor unit of a multi-split system, as listed by the outdoor unit
+
+**Kind**: global typedef  
+**Properties**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| mac | <code>string</code> | Indoor unit MAC-address, usable as the `subUnit` client option |
+| [mid] | <code>string</code> | Model id, when the outdoor unit reports one |
 
 
 ## Configuration
@@ -722,6 +865,7 @@ cd gree-hvac-client
 npm install        # also installs the git hook (pre-push lint)
 npm test           # Jest unit tests
 npm run lint       # ESLint + Prettier
+npm run typecheck  # check index.d.ts against the source
 npm run docs       # regenerate README.md from README.hbs
 ```
 

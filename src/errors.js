@@ -131,11 +131,24 @@ class ClientCancelConnectError extends ClientError {
     }
 }
 
+/**
+ * The HVAC did not answer a status request within `pollingTimeout`
+ *
+ * @class
+ * @augments ClientError
+ */
+class ClientNoResponseError extends ClientError {
+    constructor() {
+        super('HVAC did not respond to the status request');
+    }
+}
+
 module.exports = {
     ClientError,
     ClientNotConnectedError,
     ClientConnectTimeoutError,
     ClientCancelConnectError,
+    ClientNoResponseError,
     ClientSocketError,
     ClientSocketSendError,
     ClientMessageParseError,

@@ -140,6 +140,24 @@ class EncryptionService {
     }
 
     /**
+     * @returns {boolean} whether the active cipher is AES-GCM
+     */
+    isGcm() {
+        return this._activeCipher === this._gcmCipher;
+    }
+
+    /**
+     * Encrypt with the generic AES-ECB key, leaving the active cipher and its
+     * device key untouched (the generic-key `subList` request needs it).
+     *
+     * @param {object} output Request object
+     * @returns {EncryptedMessage}
+     */
+    encryptGeneric(output) {
+        return new EcbCipher().encrypt(output);
+    }
+
+    /**
      * Encrypt UDP message
      *
      * @param {object} output Request object
