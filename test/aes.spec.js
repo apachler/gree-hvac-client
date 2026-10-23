@@ -168,6 +168,7 @@ describe('AES encryption', () => {
                     "Tur",
                     "SvSt",
                     "StHt",
+                    "TemRec",
                   ],
                   "mac": "-CLIENT-ID-",
                   "t": "status",
@@ -177,7 +178,7 @@ describe('AES encryption', () => {
                 {
                   "cipher": "ecb",
                   "key": "---BINDED-KEY---",
-                  "payload": "JavRSk7J1K823T9pA0lgKsE3GJbwrQLUMKiobwiFTEGxzx6Y67+U8TXRsLNtxKnfdJdeOnLymrBy3bWEGzPogUfVWHGFkj5prdUB5TC3LHVHubu1ILbqdLI9ecbR3+vb+YSBeoh8+G/wkxD8pnt5yoS1GRJuZLZzEGPFhEamq31cc9SS1oL3J5y4dQMniwH0vtm4P+QXaBmM/DBUs0CoGofZxbbqTmV20hhhqVVic/I=",
+                  "payload": "JavRSk7J1K823T9pA0lgKsE3GJbwrQLUMKiobwiFTEGxzx6Y67+U8TXRsLNtxKnfdJdeOnLymrBy3bWEGzPogUfVWHGFkj5prdUB5TC3LHVHubu1ILbqdLI9ecbR3+vb+YSBeoh8+G/wkxD8pnt5yoS1GRJuZLZzEGPFhEamq30zgzWWW1MtRbBSp6yu/r+Ne6aCcoW7Wj4oGp4akcry0pfHcWiZYKXMsb98pQxkwgaRPDlIdCvXc9rrVczrrQDq",
                 }
             `);
 
@@ -369,6 +370,7 @@ describe('AES encryption', () => {
                     "Tur",
                     "SvSt",
                     "StHt",
+                    "TemRec",
                   ],
                   "mac": "-CLIENT-ID-",
                   "t": "status",
@@ -378,8 +380,8 @@ describe('AES encryption', () => {
                 {
                   "cipher": "gcm",
                   "key": "---BINDED-KEY---",
-                  "payload": "UDrTdyaO9ZW39UVjLgF3uLeCNJWMC5lr4yJ01vL2QQqmxi0B9v9Y0pQ67Oe53rsi1014mp9NyLjjTK/Jz8yOaRMZQCQqe2AihWDzOLyl3OHk9S6wve7u6ahTlvr+Ot8z5T9ClNM0YO5LX9My/cVIoRqKh8bpKj0wp6EeaHNnzAnp9S6XY1PgOTkYmicP+fqX+3ceiv+U9VqSrFcSoyobQpVgOlF30Ujg8hkg9xJFyA==",
-                  "tag": "kU+8zsV1q/tqV9mXlamlJg==",
+                  "payload": "UDrTdyaO9ZW39UVjLgF3uLeCNJWMC5lr4yJ01vL2QQqmxi0B9v9Y0pQ67Oe53rsi1014mp9NyLjjTK/Jz8yOaRMZQCQqe2AihWDzOLyl3OHk9S6wve7u6ahTlvr+Ot8z5T9ClNM0YO5LX9My/cVIoRqKh8bpKj0wp6EeaHNnzAnp9S6XY1PgOTkYmid+94yf90ZZ0//kmjS2iHpktEFyLPsFXWsBxiPXq1p4oBVFj4OfMPgizPQ3TA==",
+                  "tag": "0CCa7JJTYn9M+///LIFbZQ==",
                 }
             `);
 

@@ -25,13 +25,13 @@ self-contained npm tarball; needs no git, no build step, ideal for Docker /
 air-gapped builds):
 
 ```shell
-npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.1.0/gree-hvac-client-4.1.0.tgz
+npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz
 ```
 
 **Or install the Git ref** (npm clones the repo at the tag):
 
 ```shell
-npm install github:apachler/gree-hvac-client#v4.1.0
+npm install github:apachler/gree-hvac-client#v4.2.0
 ```
 
 Either way you can pin it in `package.json`:
@@ -39,7 +39,7 @@ Either way you can pin it in `package.json`:
 ```json
 {
   "dependencies": {
-    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.1.0/gree-hvac-client-4.1.0.tgz"
+    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz"
   }
 }
 ```
@@ -80,6 +80,17 @@ client.on('no_response', () => {
 
 ```
 
+Find devices on the network:
+
+```javascript
+const Gree = require('gree-hvac-client');
+
+Gree.Client.discover({host: '192.168.7.255'}).then(devices => {
+    // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.7.60', version: 'V1.1.13', pack: {...}}]
+    console.log(devices);
+});
+```
+
 ### Connection loss and reconnect
 
 The client recovers from the device dropping off WiFi on its own:
@@ -112,8 +123,11 @@ client.on('error', error => console.error(error.message));
 
 | Command | Values | Description |
 |-|-|-|
-| **temperature** | any integer |Target setpoint, in `temperatureUnit` |
-| **currentTemperature** | any integer |In degrees Celsius by default. (Read-only) |
+| **temperature** | any integer |Target setpoint, in `temperatureUnit` (whole °F are encoded exactly, see [Fahrenheit setpoints](docs/PROTOCOL.md#fahrenheit-setpoints-temrec)) |
+| **currentTemperature** | any integer |Indoor sensor in °C. (Read-only) |
+| **outdoorTemperature** | any integer |Outdoor sensor in °C, `0` if the unit has none. (Read-only, optional) |
+| **humidity** | any integer |Indoor relative humidity in %. (Read-only, optional) |
+| **errorCode** | any integer |Fault code, `0` = no fault. (Read-only, optional) |
 | **temperatureUnit** | _celsius_, _fahrenheit_ | Unit for `temperature` |
 | **mode** | _auto_, _cool_, _heat_, _dry_, _fan_only_|Operation mode |
 | **fanSpeed** | _auto_, _low_, _mediumLow_, _medium_, _mediumHigh_, _high_ | Fan speed |
@@ -129,6 +143,11 @@ client.on('error', error => console.error(error.message));
 | **sleep** | _off_, _on_ | Sleep mode |
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
+| **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
+
+_Optional_ properties exist only on some units: the client probes for them
+after connecting and only reports the ones the unit answers. To stop the unit
+beeping on every command, use the `silent` option.
 
 ## Configuring HVAC WiFi
 

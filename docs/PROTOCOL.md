@@ -52,6 +52,10 @@ attempt (see [`src/encryption-service.js`](../src/encryption-service.js)).
   replies with parallel arrays `cols`/`dat` (code → value).
 - **cmd** sets properties: `opt` holds vendor codes, `p` the new values; the
   device echoes them back in `res` (`opt`/`val`).
+- **Discovery:** a broadcast `scan` is answered by every device on the
+  network, each with its own `dev` reply (`cid`/`mac`, `name`, firmware `ver`,
+  brand, model). `Client.discover()` collects them; some firmwares leave
+  `cid`/`mac` empty in the `dev` pack and only the envelope's `cid` has it.
 
 ## Envelope format
 
@@ -85,7 +89,7 @@ Friendly name ⇄ vendor code mapping and value enums, as exposed by
 | ------------- | ----------- | ----------------------- | ------- |
 | `power` | `Pow` | off→0, on→1 | Unit on/off. |
 | `mode` | `Mod` | auto→0, cool→1, dry→2, fan_only→3, heat→4 | Operating mode. |
-| `temperature` | `SetTem` | integer °C or °F | Target setpoint (send with `temperatureUnit`). |
+| `temperature` | `SetTem` (+ `TemRec`) | integer °C or °F | Target setpoint, in `temperatureUnit`. Always °C on the wire; see [Fahrenheit setpoints](#fahrenheit-setpoints-temrec). |
 | `temperatureUnit` | `TemUn` | celsius→0, fahrenheit→1 | Unit for `temperature`. |
 | `currentTemperature` | `TemSen` | integer (see quirk below) | **Read-only** internal sensor. `0` = unsupported. |
 | `fanSpeed` | `WdSpd` | auto→0, low→1, mediumLow→2, medium→3, mediumHigh→4, high→5 | Fan speed. `mediumLow`/`mediumHigh` are absent on 3-speed units. |
@@ -100,6 +104,26 @@ Friendly name ⇄ vendor code mapping and value enums, as exposed by
 | `turbo` | `Tur` | off→0, on→1 | Turbo / jet (see below). |
 | `powerSave` | `SvSt` | off→0, on→1 | Power-saving / eco (see below). |
 | `safetyHeating` | `StHt` | off→0, on→1 | 8 °C freeze-protection heating (see below). |
+| `antiDirectBlow` | `AntiDirectBlow` | off→0, on→1 | Keeps the air flow off people. Optional (see below). |
+| `outdoorTemperature` | `OutEnvTem` | integer, `−40` offset | **Read-only** outdoor-unit sensor in °C. `0` = unsupported. Optional. |
+| `humidity` | `DwatSen` | integer % | **Read-only** indoor relative humidity. Optional. |
+| `errorCode` | `AllErr` | integer | **Read-only** fault code, `0` = no fault. Optional. |
+
+### Optional properties
+
+`antiDirectBlow`, `outdoorTemperature`, `humidity` and `errorCode` exist only
+on some units. A unit without the feature may answer a status request for one
+of these codes with an empty `dat`, so the client doesn't put them in every
+poll: after each bind it sends one `status` request per code, and polls a code
+from then on only if the unit answered it with a value. Until then the
+property is simply absent from `update` events.
+
+### Beeper
+
+The beeper is not device state but a flag sent with each `cmd`: older
+firmwares read `Buzzer_ON_OFF` (`1` = silent), newer ones `BuzzerCtrl`
+(`0` = silent). With the `silent` client option set, the client adds both to
+every set request; otherwise it sends neither and the unit beeps as usual.
 
 ## Feature properties explained
 
@@ -135,6 +159,26 @@ ones it doesn't have.
 - **safetyHeating** (`StHt`) — *8 °C heating / freeze protection.* Holds the
   room just above freezing (~8 °C) — used to keep an unoccupied space from
   freezing without heating it to a comfort temperature.
+
+## Fahrenheit setpoints (`TemRec`)
+
+`SetTem` is the setpoint in **whole °C**, also when the unit displays °F
+(`TemUn` = 1). One °F step is only 0.56 °C, so two whole-°F values round to the
+same °C — 75 °F and 76 °F are both 24 °C. The `TemRec` bit tells them apart
+(formula from [tomikaa87/gree-remote](https://github.com/tomikaa87/gree-remote)):
+
+```text
+c       = (°F − 32) × 5 / 9
+SetTem  = round(c)
+TemRec  = 1 if c > SetTem, else 0
+```
+
+The client does this for you when the unit is in °F — set in the same call
+via `temperatureUnit`, or else the unit's current `TemUn`: `temperature` is
+then in °F, sent as `SetTem` + `TemRec` + `TemUn`, and decoded back to °F in
+`update`/`success` events. A °C setpoint is sent as `SetTem` alone, as before.
+A `SetTem` above 40 while in °F is taken as already being °F, since some
+firmwares report it that way.
 
 ## The TemSen +40 quirk
 

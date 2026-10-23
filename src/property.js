@@ -20,6 +20,11 @@
  * @property {string} quiet - Controls the Quiet mode which slows down the fan to its most quiet speed. Not available in Dry and Fan mode
  * @property {string} turbo - Sets fan speed to the maximum. Fan speed cannot be changed while active and only available in Dry and Cool mode
  * @property {string} powerSave - Power saving mode
+ * @property {string} safetyHeating - 8 °C heating / freeze protection
+ * @property {string} antiDirectBlow - Keeps the air flow from blowing directly at people (not available on all units)
+ * @property {string} outdoorTemperature - Get the outdoor unit's temperature sensor in °C (read-only; `0` when the unit has no such sensor)
+ * @property {string} humidity - Get the indoor relative humidity in % (read-only; only units with a humidity sensor report it)
+ * @property {string} errorCode - Get the unit's fault code, `0` when there is no fault (read-only)
  */
 const PROPERTY = {
     power: 'power',
@@ -39,6 +44,10 @@ const PROPERTY = {
     turbo: 'turbo',
     powerSave: 'powerSave',
     safetyHeating: 'safetyHeating',
+    antiDirectBlow: 'antiDirectBlow',
+    outdoorTemperature: 'outdoorTemperature',
+    humidity: 'humidity',
+    errorCode: 'errorCode',
 };
 
 module.exports = {

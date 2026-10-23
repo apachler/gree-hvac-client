@@ -24,6 +24,7 @@ describe('Client options', () => {
               "pollingTimeout": 1000,
               "port": 1234,
               "reconnectMaxDelay": 30000,
+              "silent": false,
             }
         `);
     });

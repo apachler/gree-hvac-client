@@ -16,6 +16,7 @@
  * @property {number} pollingInterval=3000 - Device properties polling interval
  * @property {number} pollingTimeout=1000 - Device properties polling timeout, emits `no_response` events in case of no response from HVAC device for a status request
  * @property {number} maxNoResponse=3 - Re-scan and re-bind the device after this many consecutive `no_response` events (the device may have dropped off WiFi, been re-paired with a new key or moved to another address). `0` disables it.
+ * @property {boolean} silent=false - Ask the unit not to beep when it receives a command (sends the `Buzzer_ON_OFF`/`BuzzerCtrl` flags with every set request; units without a controllable beeper ignore them)
  * @property {string} logLevel=error - Logging level (debug, info, warn, error)
  * @property {boolean} debug=false - Override logLevel to debug, deprecated, use logLevel option
  */
@@ -31,6 +32,7 @@ const CLIENT_OPTIONS = {
     pollingInterval: 3000,
     pollingTimeout: 1000,
     maxNoResponse: 3,
+    silent: false,
     logLevel: 'error',
     debug: false,
 };
@@ -52,6 +54,7 @@ const ENV_OPTIONS = {
     pollingInterval: 'GREE_HVAC_POLLING_INTERVAL',
     pollingTimeout: 'GREE_HVAC_POLLING_TIMEOUT',
     maxNoResponse: 'GREE_HVAC_MAX_NO_RESPONSE',
+    silent: 'GREE_HVAC_SILENT',
     logLevel: 'GREE_HVAC_LOG_LEVEL',
     debug: 'GREE_HVAC_DEBUG',
 };
