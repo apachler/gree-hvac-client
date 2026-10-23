@@ -4,11 +4,25 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Let new releases age a few days before proposing them (security
+    # updates skip this), so a compromised publish is likely pulled first.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       dev-dependencies:
         dependency-type: "development"
+
+  # All GitHub Actions bumps batched into one monthly PR.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    # Let new releases age a few days before proposing them (security
+    # updates skip this), so a compromised publish is likely pulled first.
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
