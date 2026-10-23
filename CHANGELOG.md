@@ -1,3 +1,10 @@
+# [4.2.0](https://github.com/apachler/gree-hvac-client/compare/v4.1.0...v4.2.0) (2026-10-23)
+
+
+### Features
+
+* Fahrenheit setpoints, optional sensors, discovery and silent mode ([#48](https://github.com/apachler/gree-hvac-client/issues/48)) ([edf64e0](https://github.com/apachler/gree-hvac-client/commit/edf64e035e1ba0044a18b5defcc5af19a78982ca))
+
 # [4.1.0](https://github.com/apachler/gree-hvac-client/compare/v4.0.0...v4.1.0) (2026-09-23)
 
 
