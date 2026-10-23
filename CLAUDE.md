@@ -25,8 +25,11 @@ src/
   property-transformer.js    friendly ↔ vendor name/value translation
   errors.js                  ClientError subclasses
   logger.js                  Winston logger
-test/                        Jest specs; test/support/ has the device mock + fixtures
-example/                     runnable usage scripts (promises, async-await, poll-status, set-properties)
+test/                        Jest specs; test/support/ has the dgram mock, device fixtures
+                             and fake-unit.js (a fake unit on a real UDP socket)
+test/types/usage.ts          compile-time checks of index.d.ts (never run)
+example/                     usage scripts; probe.js is a hardware check shipped in the package
+docs/PROTOCOL.md             the wire protocol and every vendor code
 README.hbs                   Handlebars template; README.md is GENERATED from it
 ```
 
@@ -78,26 +81,18 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   **Always attach an `error` handler** — an unhandled `error` event terminates
   the process (Node EventEmitter semantics).
 - `setProperty` / `setProperties` take friendly `PROPERTY` keys and `VALUE`
-  enums; the transformer maps them to/from the vendor wire names.
-- Property mapping needs device state in two places: a °F `temperature` is
-  `SetTem` (°C) + `TemRec`, so `toVendor`/`fromVendor` take the current vendor
-  properties as `state`; and the optional codes (`OPTIONAL_VENDOR_CODES`) are
-  probed once per bind and polled only if answered — a probe reply must not
-  count as a poll reply.
-- `Client.discover()` is static and opens its own socket (no bind).
-- Status answers have no request id: `_statusRequests` holds the pending
-  `poll` batches, `probe`s and `query`s (getVendorProperties, getClock, the
-  `hid` query) and `_matchStatusRequest` matches an answer to the oldest one
-  asking for all its columns; an answer without columns goes to the oldest
-  probe/query (units answer unknown codes that way), any other unmatched
-  answer counts as the poll's. Polls
-  are split into `statusBatchSize` batches; the status timeout clears only
-  once every batch answered. Query timers live on the request and
-  `_dispose()` clears them.
-- `getProperties()` waiters resolve once a poll is fully answered and
-  reject on `no_response` / `disconnect()`. `getSubUnits()` keeps one pending
-  `subList` request in `_subListRequest` (its timer is not one of the four
-  refs below; `_dispose()` settles it).
+  enums; `PropertyTransformer` maps them to/from the vendor wire names. It is
+  built with the client options (`halfDegree`, `encodedTargetHumidity` change
+  the encoding) and `toVendor`/`fromVendor` take the current vendor properties
+  as `state`: a °F `temperature` is `SetTem` (°C) + `TemRec`, a half °C one
+  `SetTem` + `Add0.5`, and either may come in a different packet than `SetTem`.
+- Optional codes (`OPTIONAL_VENDOR_CODES`) exist only on some units: probed
+  one per request after each bind, polled only once answered. Then the `hid`
+  (firmware id) is queried once.
+- `Client.discover()` and `Client.configureWifi()` are static and open their
+  own socket (no bind).
+- `getSubUnits()` keeps one pending `subList` request in `_subListRequest`
+  (its timer is not one of the four refs below; `_dispose()` settles it).
 - Multi-split (`subUnit` option): envelope gets `tcid:<gateway cid>`, status
   packs name the indoor unit in `mac`, cmd packs in `sub`. Unverified on
   hardware — see docs/PROTOCOL.md.
@@ -105,8 +100,27 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   client internals on purpose.
 - **Adding an option** touches `CLIENT_OPTIONS` + `ENV_OPTIONS` in
   `client-options.js` (env strings are coerced to the default's type),
-  `.env.example`, the inline snapshot in `test/client-options.spec.js`, then
-  `npm run docs`.
+  `.env.example`, the inline snapshot in `test/client-options.spec.js`,
+  `ClientOptions` in `index.d.ts`, then `npm run docs`.
+- **Adding a property** touches `property.js` (name + JSDoc),
+  `property-value.js` and `property-vendor-value.js` (value maps, also `{}`
+  for numeric ones), `PROPERTY_VENDOR_CODES` in `property-transformer.js`
+  (plus `OPTIONAL_VENDOR_CODES` if not every unit has it, `readOnly()` if it
+  can't be set), `PROPERTY`/`VALUE` in `index.d.ts`, and the property tables
+  in `README.hbs` and `docs/PROTOCOL.md`.
+
+## Status requests and their answers
+
+A status answer carries no request id. `_statusRequests` holds what is
+pending — `poll` batches, `probe`s, `query`s (getVendorProperties, getClock,
+the `hid` query) — and `_matchStatusRequest` gives an answer to the oldest
+request that asked for all of its columns. An answer **without columns** goes
+to the oldest probe/query (units answer unknown codes that way; taking it for
+the poll's would hide a unit that stopped answering polls); any other
+unmatched answer counts as the poll's. Polls are split into `statusBatchSize`
+batches, and the status timeout clears (and `getProperties()` waiters resolve)
+only once every batch is answered. Query timers live on the request;
+`_dispose()` clears them and rejects the queries.
 
 ## Connection lifecycle (`client.js` + `encryption-service.js`)
 
@@ -137,7 +151,6 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   changes the wire format.
 - Coverage floors in `jest.config.js` sit just below the actual numbers
   (≈99.8% lines): new code needs tests or `npm run test:coverage` fails.
-
 - Specs mock `dgram` with `test/support/socket-mock.js`. Capture only the
   `'message'` listener (`on: (event, cb) => event === 'message' && …`) — the
   client registers an `'error'` listener too.
@@ -191,3 +204,9 @@ Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git re
 - `package-lock.json` and `README.md` are marked `linguist-generated` in
   `.gitattributes` — `README.md` is regenerated, don't hand-edit it.
 - Workflow triggers: CI runs on every push/PR; releases only on push to master.
+- `gh` resolves to the upstream repo (inwaar) by default: always pass
+  `-R apachler/gree-hvac-client` for PRs, checks and issues.
+- `npm run docs` ends in `; echo`, so it **exits 0 even when jsdoc2md fails**
+  and leaves a broken `README.md`. jsdoc's type parser rejects TypeScript-only
+  syntax such as optional members (`{{a?: string}}`) — use `{object}` and
+  describe the fields. Check with `npx jsdoc2md -t README.hbs src/*.js >/dev/null`.
