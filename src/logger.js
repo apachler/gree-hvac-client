@@ -132,4 +132,6 @@ const createLogger = level =>
 module.exports = {
     createLogger,
     guardLogger,
+    // for tests
+    formats,
 };

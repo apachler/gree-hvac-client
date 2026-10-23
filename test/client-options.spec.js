@@ -32,4 +32,22 @@ describe('Client options', () => {
             }
         `);
     });
+
+    it('coerces env strings to the type of the default', () => {
+        process.env.GREE_HVAC_PORT = 'not a number';
+        process.env.GREE_HVAC_POLL = 'off';
+        process.env.GREE_HVAC_MAC = 'f4911e000001';
+        try {
+            expect(createOptions({})).toMatchObject({
+                port: 7000,
+                poll: false,
+                mac: 'f4911e000001',
+            });
+        } finally {
+            delete process.env.GREE_HVAC_PORT;
+            delete process.env.GREE_HVAC_POLL;
+            delete process.env.GREE_HVAC_MAC;
+            delete process.env.GREE_HVAC_HOST;
+        }
+    });
 });

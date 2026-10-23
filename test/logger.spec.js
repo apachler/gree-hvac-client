@@ -1,4 +1,6 @@
-const { createLogger, guardLogger } = require('../src/logger');
+const { createLogger, guardLogger, formats } = require('../src/logger');
+
+const MESSAGE = Symbol.for('message');
 
 describe('logger guard (upstream #28)', () => {
     it('swallows a throw from a log level method instead of propagating', () => {
@@ -96,5 +98,76 @@ describe('logger guard (upstream #28)', () => {
         expect(() =>
             logger.child({ service: 'test' }).error('ok')
         ).not.toThrow();
+    });
+});
+
+describe('log line format', () => {
+    const info = metadata => ({
+        timestamp: '2026-10-23T18:47:48.766Z',
+        ms: '+0ms',
+        level: 'warn',
+        service: 'client',
+        sid: 'cfbbe12a-0000-4000-8000-000000000000',
+        version: '4.3.0',
+        message: 'Status request timeout',
+        metadata,
+    });
+
+    it('prints time, level, service, version and session id', () => {
+        expect(formats.print.transform(info({}))[MESSAGE]).toBe(
+            '[2026-10-23T18:47:48.766Z +0ms] warn CLIENT:4.3.0/cfbbe12a> Status request timeout'
+        );
+    });
+
+    it('appends the metadata', () => {
+        const line = formats.print.transform(info({ timeout: 1000 }))[MESSAGE];
+        expect(line).toMatch(/Status request timeout \n/);
+        expect(line).toMatch(/timeout/);
+        expect(line).toMatch(/1000/);
+    });
+
+    it('logs through the console transport outside of tests', () => {
+        jest.isolateModules(() => {
+            const env = process.env.NODE_ENV;
+            process.env.NODE_ENV = 'production';
+            const write = jest
+                .spyOn(process.stderr, 'write')
+                .mockImplementation(() => true);
+            const consoleError = jest
+                .spyOn(console, 'error')
+                .mockImplementation(() => {});
+            try {
+                const { createLogger: create } = require('../src/logger');
+                create('error')
+                    .child({ service: 'test', sid: 'abcdefgh' })
+                    .error('visible', { a: 1 });
+                const output = [
+                    ...write.mock.calls,
+                    ...consoleError.mock.calls,
+                ].join('');
+                expect(output).toMatch(/TEST:.*abcdefgh> visible/);
+            } finally {
+                process.env.NODE_ENV = env;
+                write.mockRestore();
+                consoleError.mockRestore();
+            }
+        });
+    });
+
+    it('passes the entry through as is in development', () => {
+        jest.isolateModules(() => {
+            const env = process.env.NODE_ENV;
+            process.env.NODE_ENV = 'development';
+            try {
+                const { formats: dev } = require('../src/logger');
+                const entry = { level: 'info', message: 'hi' };
+                expect(dev.vscode.transform(entry)[MESSAGE]).toEqual({
+                    level: 'info',
+                    message: 'hi',
+                });
+            } finally {
+                process.env.NODE_ENV = env;
+            }
+        });
     });
 });

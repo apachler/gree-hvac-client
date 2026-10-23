@@ -251,6 +251,14 @@ class Client extends EventEmitter {
         this._deviceInfo = {};
 
         /**
+         * The firmware id query in flight, shared by its callers
+         *
+         * @type {Promise|null}
+         * @private
+         */
+        this._hidQuery = null;
+
+        /**
          * getProperties() calls waiting for the next status response
          *
          * @type {Array<{resolve: Function, reject: Function}>}
@@ -934,9 +942,21 @@ class Client extends EventEmitter {
      * Ask for the firmware id and log a warning for firmwares whose later
      * builds dropped local control
      *
+     * @returns {Promise} settles once the firmware id is known (or not reported)
      * @private
      */
-    async _queryHid() {
+    _queryHid() {
+        // One query at a time: an answer would settle only the oldest one
+        this._hidQuery ??= this._fetchHid().finally(
+            () => (this._hidQuery = null)
+        );
+        return this._hidQuery;
+    }
+
+    /**
+     * @private
+     */
+    async _fetchHid() {
         const { hid } = await this._queryStatus(['hid']).catch(() => ({}));
         if (hid === undefined) {
             this._deviceInfo.hid = this._deviceInfo.hid ?? null;
@@ -1038,7 +1058,13 @@ class Client extends EventEmitter {
     _matchStatusRequest(pack) {
         const cols = Array.isArray(pack.cols) ? pack.cols.filter(Boolean) : [];
         if (cols.length === 0) {
-            return undefined;
+            // A unit answers codes it does not know with no columns at all:
+            // typically a probe or a query, hardly ever a full poll, and
+            // taking it for the poll's answer would hide a unit that stopped
+            // answering polls.
+            return this._statusRequests.find(
+                request => request.kind !== 'poll'
+            );
         }
         return this._statusRequests.find(request =>
             cols.every(col => request.cols.includes(col))

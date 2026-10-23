@@ -108,6 +108,7 @@ describe('More properties', () => {
                 firmwareCode: '362001065279',
             });
             expect(parseHid('')).toEqual({});
+            expect(parseHid('U-W06A(P3)V6.04.bin')).toEqual({});
             expect(parseHid(undefined)).toEqual({});
         });
 

@@ -123,6 +123,39 @@ describe('Vendor access', () => {
             expect(noResponse).toBe(0);
         });
 
+        it('takes an answer without columns for the oldest probe or query, not the poll', async () => {
+            await connect();
+            const probes = () =>
+                SUT._statusRequests.filter(r => r.kind === 'probe').length;
+            const pending = probes();
+            let settled = false;
+            const properties = SUT.getProperties().finally(
+                () => (settled = true)
+            );
+            await jest.advanceTimersByTimeAsync(0);
+
+            feed({ t: 'dat', cols: [], dat: [] });
+            await jest.advanceTimersByTimeAsync(0);
+
+            expect(probes()).toBe(pending - 1);
+            expect(settled).toBe(false);
+            feed({ t: 'dat', cols: ['Pow'], dat: [1] });
+            await expect(properties).resolves.toEqual({ power: 'on' });
+        });
+
+        it('takes an answer without columns for the poll when nothing else is pending', async () => {
+            await connect();
+            await jest.advanceTimersByTimeAsync(POLLING_TIMEOUT);
+            // the probes are never answered by this mock; drop them
+            SUT._statusRequests = [];
+            const properties = SUT.getProperties();
+            await jest.advanceTimersByTimeAsync(0);
+
+            feed({ t: 'dat', cols: [], dat: [] });
+
+            await expect(properties).resolves.toEqual({});
+        });
+
         it('ignores a column without a name in a cut-short answer', async () => {
             await connect();
             const updates = [];
@@ -221,6 +254,24 @@ describe('Vendor access', () => {
                 })
             );
             expect(info.upgradeWarning).toMatch(/2\.12.*cloud-only/);
+        });
+
+        it('rejects before the client is connected', async () => {
+            SUT = new Client({ autoConnect: false });
+            await expect(SUT.getDeviceInfo()).rejects.toBeInstanceOf(
+                ClientNotConnectedError
+            );
+        });
+
+        it('asks for the hid itself when called before the probes are done', async () => {
+            await connect();
+            SUT._deviceInfo.hid = undefined;
+
+            const info = SUT.getDeviceInfo();
+            await jest.advanceTimersByTimeAsync(0);
+            feed({ t: 'dat', cols: ['hid'], dat: [HID] });
+
+            await expect(info).resolves.toMatchObject({ hid: HID });
         });
 
         it('leaves the firmware fields out when the unit has no hid', async () => {

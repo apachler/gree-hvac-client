@@ -88,7 +88,9 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
 - Status answers have no request id: `_statusRequests` holds the pending
   `poll` batches, `probe`s and `query`s (getVendorProperties, getClock, the
   `hid` query) and `_matchStatusRequest` matches an answer to the oldest one
-  asking for all its columns; an unmatched answer counts as the poll's. Polls
+  asking for all its columns; an answer without columns goes to the oldest
+  probe/query (units answer unknown codes that way), any other unmatched
+  answer counts as the poll's. Polls
   are split into `statusBatchSize` batches; the status timeout clears only
   once every batch answered. Query timers live on the request and
   `_dispose()` clears them.
@@ -128,6 +130,13 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   emitted as `error` — an unhandled rejection kills the host process.
 
 ## Test gotchas
+
+- `test/end-to-end.spec.js` is the one spec without `jest.mock('dgram')`: it
+  runs the client against `test/support/fake-unit.js` over real UDP on
+  127.0.0.1 (random port, real timers). Add a case there for anything that
+  changes the wire format.
+- Coverage floors in `jest.config.js` sit just below the actual numbers
+  (≈99.8% lines): new code needs tests or `npm run test:coverage` fails.
 
 - Specs mock `dgram` with `test/support/socket-mock.js`. Capture only the
   `'message'` listener (`on: (event, cb) => event === 'message' && …`) — the
