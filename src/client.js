@@ -147,8 +147,24 @@ class Client extends EventEmitter {
      *
      * It is important to subscribe to the `error` event, otherwise the process will be terminated
      *
+     * Errors are informational: the client keeps connecting, polling and
+     * recovering by itself until `disconnect()` (with `reopenSocket` off, a
+     * `ClientSocketError` leaves the socket dead). A `ClientConnectTimeoutError`
+     * is followed by a `reconnecting` event and the next attempt.
+     *
      * @param {ClientError} error
      * @event Client#error
+     */
+
+    /**
+     * Emitted when the client starts over with scan + bind: a connect attempt
+     * timed out, the device missed `maxNoResponse` polls, or the socket failed
+     *
+     * @param {object} info
+     * @param {number} info.attempt Number of the connect attempt about to start: counts up while attempts fail, starts over at `1` when a bound device stopped answering
+     * @param {number} info.delayMs How long until its scan is sent (ms)
+     * @param {string} info.reason `connect_timeout`, `no_response` or `socket_error`
+     * @event Client#reconnecting
      */
 
     /**
@@ -165,6 +181,7 @@ class Client extends EventEmitter {
      * @fires Client#update
      * @fires Client#success
      * @fires Client#no_response
+     * @fires Client#reconnecting
      * @fires Client#error
      * @fires Client#disconnect
      * @example
@@ -286,7 +303,17 @@ class Client extends EventEmitter {
         this._reconnectAttempt = 1;
 
         /**
-         * Socket connection timeout reference
+         * Reconnecting after a lost connection (see _recover): the back-off
+         * then starts at `recoveryDelay`; cleared once bound again
+         *
+         * @type {boolean}
+         * @private
+         */
+        this._recovering = false;
+
+        /**
+         * Socket connection timeout reference (also the recovery pause, see
+         * _recover)
          *
          * @type {number|null}
          * @private
@@ -379,7 +406,7 @@ class Client extends EventEmitter {
         if (this._options.autoConnect) {
             process.nextTick(() => {
                 this._logger.info('Auto-connect');
-                this.connect().catch(error => this.emit('error', error));
+                this.connect().catch(error => this._emitError(error));
             });
         }
     }
@@ -592,32 +619,139 @@ class Client extends EventEmitter {
                 process.nextTick(() => reject(new ClientCancelConnectError()));
             });
 
-            this._socket = dgram.createSocket('udp4');
-            // Without a listener a socket 'error' (e.g. a failing bind) is
-            // thrown and terminates the process.
-            this._socket.on('error', error => {
-                this._logger.error('Socket error', error);
-                this.emit('error', new ClientSocketError(error));
-            });
-            this._socket.on('message', (message, rinfo) => {
-                this._handleResponse(message, rinfo).catch(error => {
-                    this._logger.error('Response handle error', error);
-                    this.emit('error', error);
-                });
-            });
+            // Skipped when disconnect() raced connect() before the bind
+            // completed (the 'disconnect' handler above already rejects this
+            // promise with ClientCancelConnectError), or a socket error
+            // started the recovery on a new socket.
+            this._openSocket(() => this._initialize().catch(reject));
+        });
+    }
 
-            this._socket.bind(() => {
-                if (!this._socket) {
-                    // disconnect() raced connect() before the bind completed;
-                    // the 'disconnect' handler above already rejects this
-                    // promise with ClientCancelConnectError.
-                    return;
-                }
+    /**
+     * Open a UDP socket and make it the client's. Messages and errors of a
+     * socket the client has since replaced or closed are ignored.
+     *
+     * @param {Function} onBound called once bound, unless the socket is no
+     *     longer the client's by then (never on a failing bind)
+     * @private
+     */
+    _openSocket(onBound) {
+        const socket = dgram.createSocket('udp4');
+        this._socket = socket;
 
-                this._socket.setBroadcast(true);
-                this._initialize().catch(reject);
+        // Without a listener a socket 'error' (e.g. a failing bind) is
+        // thrown and terminates the process.
+        socket.on('error', error => {
+            if (socket !== this._socket) {
+                return;
+            }
+            this._logger.error('Socket error', error);
+            this._emitError(new ClientSocketError(error));
+            if (this._options.reopenSocket) {
+                this._recover('socket_error');
+            }
+        });
+        socket.on('message', (message, rinfo) => {
+            if (socket !== this._socket) {
+                return;
+            }
+            this._handleResponse(message, rinfo).catch(error => {
+                this._logger.error('Response handle error', error);
+                this._emitError(error);
             });
         });
+
+        socket.bind(() => {
+            if (socket === this._socket) {
+                socket.setBroadcast(true);
+                onBound();
+            }
+        });
+    }
+
+    /**
+     * Start the next connect attempt. With `reopenSocket` it runs on a new
+     * socket (new local port): some WiFi modules only recover from a wedged
+     * state that way, short of a power cycle. Called with a socket only.
+     *
+     * @private
+     */
+    _restart() {
+        const start = () =>
+            this._initialize().catch(error => {
+                this._logger.error('Initialize error', error);
+                this._emitError(error);
+            });
+        if (!this._options.reopenSocket) {
+            start();
+            return;
+        }
+
+        const old = this._socket;
+        this._openSocket(start);
+        if (old !== this._socket) {
+            try {
+                old.close();
+            } catch {
+                // already closed (e.g. after a socket error)
+            }
+        }
+    }
+
+    /**
+     * Give up on the current connection (or connect attempt) and start over
+     * with scan + bind after a pause: `recoveryDelay` when the device stopped
+     * answering, the connect back-off after a socket error (a socket that
+     * fails again at once must not spin). Called with a socket only.
+     *
+     * @param {'no_response'|'socket_error'} reason
+     * @fires Client#reconnecting
+     * @private
+     */
+    _recover(reason) {
+        this._dispose();
+        this._rejectStatusWaiters(new ClientNotConnectedError());
+        this._bound = false;
+        this._recovering = true;
+
+        let delay = this._options.recoveryDelay;
+        if (reason === 'socket_error') {
+            delay = this._retryDelay();
+            this._reconnectAttempt++;
+        }
+
+        this._logger.warn('Reconnect', { reason, delay });
+        this.emit('reconnecting', {
+            attempt: this._reconnectAttempt,
+            delayMs: delay,
+            reason,
+        });
+
+        if (delay > 0) {
+            this._socketTimeoutRef = setTimeout(() => {
+                this._socketTimeoutRef = null;
+                this._restart();
+            }, delay);
+        } else {
+            this._restart();
+        }
+    }
+
+    /**
+     * Emit `error`, except after disconnect(): nothing is emitted after it
+     *
+     * @param {Error} error
+     * @fires Client#error
+     * @private
+     */
+    _emitError(error) {
+        if (this._socket) {
+            this.emit('error', error);
+        } else {
+            this._logger.info('Discard error, client is disconnected', {
+                error,
+            });
+        }
     }
 
     /**
@@ -697,16 +831,7 @@ class Client extends EventEmitter {
         // lifetime of the process.
         this._clearTimer('_socketTimeoutRef');
 
-        // Exponential back-off: connectTimeout, 2x, 4x, ... capped at
-        // reconnectMaxDelay. Devices rate-limit scan/bind requests, and a unit
-        // that is off WiFi for hours needs no scan every few seconds.
-        const timeout = Math.min(
-            this._options.connectTimeout * 2 ** (this._reconnectAttempt - 1),
-            Math.max(
-                this._options.reconnectMaxDelay,
-                this._options.connectTimeout
-            )
-        );
+        const timeout = this._retryDelay();
 
         this._socketTimeoutRef = setTimeout(() => {
             this._socketTimeoutRef = null;
@@ -717,18 +842,54 @@ class Client extends EventEmitter {
             }
 
             this._logger.warn('Connect timeout, reconnect', { timeout });
-            this.emit('error', new ClientConnectTimeoutError());
+            this._emitError(new ClientConnectTimeoutError());
+            if (!this._socket) {
+                // an error listener called disconnect()
+                return;
+            }
             this._reconnectAttempt++;
-
-            this._initialize().catch(error => {
-                this.emit('error', error);
-                this._logger.error('Initialize error', error);
+            this.emit('reconnecting', {
+                attempt: this._reconnectAttempt,
+                delayMs: 0,
+                reason: 'connect_timeout',
             });
+
+            this._restart();
         }, timeout);
     }
 
     /**
-     * Disconnect from a HVAC device and stop status polling
+     * How long the current connect attempt waits for the device.
+     *
+     * Exponential back-off: connectTimeout, 2x, 4x, ... capped at
+     * reconnectMaxDelay. Devices rate-limit scan/bind requests, and a unit
+     * that is off WiFi for hours needs no scan every few seconds. After a
+     * lost connection it starts at `recoveryDelay` when that is longer.
+     *
+     * @returns {number} ms
+     * @private
+     */
+    _retryDelay() {
+        const base = this._recovering
+            ? Math.max(
+                  this._options.connectTimeout,
+                  this._options.recoveryDelay
+              )
+            : this._options.connectTimeout;
+        return Math.min(
+            base * 2 ** (this._reconnectAttempt - 1),
+            Math.max(this._options.reconnectMaxDelay, base)
+        );
+    }
+
+    /**
+     * Disconnect from a HVAC device and stop status polling.
+     *
+     * Final until the next `connect()`: once called, no timer of the client
+     * fires and no event is emitted but `disconnect` itself (no `error`, no
+     * `reconnecting`, no late `update`). Queued set requests and pending
+     * `getProperties()`/`getVendorProperties()` calls reject with
+     * `ClientNotConnectedError`, as does a second `disconnect()`.
      *
      * @returns {Promise}
      * @fires Client#disconnect
@@ -1513,10 +1674,7 @@ class Client extends EventEmitter {
             noResponse: this._noResponseCount,
         });
 
-        this._initialize().catch(error => {
-            this.emit('error', error);
-            this._logger.error('Initialize error', error);
-        });
+        this._recover('no_response');
     }
 
     /**
@@ -1685,7 +1843,14 @@ class Client extends EventEmitter {
 
         const timeout = this._options.bindTimeout;
 
+        const socket = this._socket;
         await this._sendBindRequest(1);
+
+        // disconnect() or the next attempt (on a new socket) may have raced
+        // the send: a bind timer armed now would outlive them.
+        if (socket !== this._socket || this._bound) {
+            return;
+        }
 
         // Re-arming without clearing would strand the previous timer (e.g.
         // when a device retransmits its handshake) beyond the reach of
@@ -1698,7 +1863,7 @@ class Client extends EventEmitter {
             // A rejection inside a timer callback has no caller to bubble to;
             // unhandled it terminates the process instead of surfacing as an
             // 'error' event.
-            this._sendBindRequest(2).catch(error => this.emit('error', error));
+            this._sendBindRequest(2).catch(error => this._emitError(error));
         }, timeout);
     }
 
@@ -1717,6 +1882,7 @@ class Client extends EventEmitter {
         }
         this._bound = true;
         this._reconnectAttempt = 1;
+        this._recovering = false;
 
         this._logger.info('Binding success (connected)', {
             host: this._deviceAddress || this._options.host,
@@ -1728,7 +1894,7 @@ class Client extends EventEmitter {
         // A failing first request (e.g. the network dropped right after the
         // bind) must not abort the connect: polling and the no-response
         // rebind take it from here.
-        await this._requestStatus().catch(error => this.emit('error', error));
+        await this._requestStatus().catch(error => this._emitError(error));
 
         if (!this._socket) {
             // disconnect() raced the status request
@@ -1742,7 +1908,7 @@ class Client extends EventEmitter {
             this._statusIntervalRef = setInterval(
                 () =>
                     this._requestStatus().catch(error =>
-                        this.emit('error', error)
+                        this._emitError(error)
                     ),
                 this._options.pollingInterval
             );

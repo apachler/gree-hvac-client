@@ -27,6 +27,8 @@ describe('Client options', () => {
               "pollingTimeout": 1000,
               "port": 1234,
               "reconnectMaxDelay": 30000,
+              "recoveryDelay": 0,
+              "reopenSocket": true,
               "silent": false,
               "statusBatchSize": 20,
               "subUnit": null,

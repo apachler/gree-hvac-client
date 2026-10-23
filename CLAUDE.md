@@ -78,9 +78,12 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   `poll`). Options can be set via the constructor or `GREE_HVAC_*` env vars
   (see `client-options.js`).
 - Events: `connect`, `update` (state changed on the device, e.g. by a remote),
-  `success` (a set we issued was confirmed), `no_response`, `error`, `disconnect`.
+  `success` (a set we issued was confirmed), `no_response`, `reconnecting`
+  (`{attempt, delayMs, reason}`), `error`, `disconnect`.
   **Always attach an `error` handler** — an unhandled `error` event terminates
-  the process (Node EventEmitter semantics).
+  the process (Node EventEmitter semantics). Errors are documented as
+  informational (the client keeps recovering), so don't add code paths that
+  give up after an `error`.
 - `setProperty` / `setProperties` take friendly `PROPERTY` keys and `VALUE`
   enums (or their raw vendor numbers; numeric strings become numbers). Anything
   else — unknown/read-only properties, other values, out-of-range setpoints —
@@ -141,9 +144,26 @@ fields named `key`, `psw` or `password` never reach the output.
   the device answered from (`mac` pins one device on a broadcast `host`).
   Bind attempt 1 uses the active cipher; after `bindTimeout` attempt 2 forces
   GCM. `bindok` sets the device key and starts status polling.
-- Back to `_initialize()` on a connect timeout (exponential back-off up to
-  `reconnectMaxDelay`) or after `maxNoResponse` consecutive `no_response`
-  events — the device may be back with a new key (re-paired) or address.
+- Retries go through `_restart()`, which with `reopenSocket` (default on)
+  opens a new socket via `_openSocket()` and closes the old one before
+  `_initialize()`. Triggers: a connect timeout (`_scheduleReconnect`), or
+  `_recover(reason)` after `maxNoResponse` consecutive `no_response` events
+  (the device may be back with a new key or address) or a socket `error`.
+  Each emits `reconnecting`.
+- `_recover()` drops the binding (`_bound = false`) and waits `recoveryDelay`
+  for `no_response`, or the current back-off for `socket_error`, so a socket
+  that keeps failing can't spin. The pause timer is `_socketTimeoutRef`.
+  `_retryDelay()` doubles from `connectTimeout`, or from `recoveryDelay`
+  while `_recovering`, up to `reconnectMaxDelay`. `bindok` resets the
+  attempt counter and `_recovering`.
+- Socket listeners ignore a socket that is no longer `this._socket`
+  (replaced or disconnected), so late packets from an old socket do nothing.
+  Most specs return one shared socket mock, which makes that check a no-op
+  there; `test/recovery.spec.js` creates one mock per socket.
+- With a broadcast `host` plus `mac`, the re-scan after `no_response` is
+  how the client follows a DHCP address change (`_deviceAddress` is reset in
+  `_initialize()`). There is no periodic re-scan, so with `poll: false` a
+  move goes unnoticed.
 - `decrypt` tries the active cipher, then the other, and makes whichever
   works active — so a GCM scan reply means a GCM bind on attempt 1. Once
   bound, late generic-key `dev`/`bindok` replies are dropped via
@@ -151,16 +171,22 @@ fields named `key`, `psw` or `password` never reach the output.
 - Five timer refs (`_socketTimeoutRef`, `_bindTimeoutRef`, `_statusIntervalRef`,
   `_statusTimeoutRef`, `_commandTimerRef`): set them only after `_clearTimer()`,
   and `_dispose()` clears all (and rejects queued commands). Overwriting a ref strands a timer `disconnect()` can't reach.
-- `disconnect()` can race any `await`: re-check `this._socket` after awaits.
-  Promises started from timers or the message handler must be caught and
-  emitted as `error` — an unhandled rejection kills the host process.
+- `disconnect()` is documented as final: no timer fires and no event but
+  `disconnect` follows it. It can race any `await`, so re-check
+  `this._socket` (or compare it to the socket captured before the await)
+  afterwards. Promises started from timers or the message handler must be
+  caught and passed to `_emitError()`, never `emit('error')` directly:
+  `_emitError()` drops errors once disconnected. An unhandled rejection
+  kills the host process.
 
 ## Test gotchas
 
 - `test/end-to-end.spec.js` is the one spec without `jest.mock('dgram')`: it
   runs the client against `test/support/fake-unit.js` over real UDP on
   127.0.0.1 (random port, real timers). Add a case there for anything that
-  changes the wire format.
+  changes the wire format. The fake unit's `blockedPorts` ignores chosen
+  client source ports (a module wedged on one socket), and each `received`
+  entry carries the sender's `port`.
 - `test/fuzz.spec.js` holds fast-check property tests: arbitrary bytes, JSON
   and encrypted packs into `_handleResponse` must only ever fail with a
   `ClientError`. A counterexample is printed with its seed to replay.

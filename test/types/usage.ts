@@ -34,6 +34,14 @@ client.on('update', (updated: PropertyMap, properties) => {
     void mode;
 });
 client.on('error', error => void error.origin);
+client.on('reconnecting', ({ attempt, delayMs, reason }) => {
+    const known: 'connect_timeout' | 'no_response' | 'socket_error' = reason;
+    void (attempt + delayMs);
+    void known;
+});
+void new Client({ recoveryDelay: 30000, reopenSocket: true });
+// @ts-expect-error not a client option
+void new Client({ rebindDelay: 1 });
 client.once('disconnect', () => {});
 // @ts-expect-error unknown event
 client.on('connected', () => {});

@@ -17,6 +17,8 @@
  * @property {number} pollingInterval=3000 - Device properties polling interval
  * @property {number} pollingTimeout=1000 - Device properties polling timeout, emits `no_response` events in case of no response from HVAC device for a status request
  * @property {number} maxNoResponse=3 - Re-scan and re-bind the device after this many consecutive `no_response` events (the device may have dropped off WiFi, been re-paired with a new key or moved to another address). `0` disables it.
+ * @property {number} recoveryDelay=0 - Pause (ms) before re-scanning a device that stopped answering (see `maxNoResponse`), so a struggling WiFi module gets time to recover instead of scan/bind traffic. Later attempts then back off from it (doubling up to `reconnectMaxDelay`, or `recoveryDelay` when that is longer). `0` re-scans at once.
+ * @property {boolean} reopenSocket=true - Open a new UDP socket (new local port) for every reconnect attempt and after a socket error: some WiFi modules only recover from a wedged state that way, short of a power cycle. With `false` the client keeps its first socket.
  * @property {number} statusBatchSize=20 - Most vendor codes asked for in one status request; more are split over several requests (some firmwares stop answering above ~29 codes or ~800 bytes)
  * @property {boolean} halfDegree=false - Celsius setpoints in half degrees (e.g. 23.5), for firmwares that carry the half degree in `Add0.5`. Leave off unless your unit shows half degrees: other firmwares ignore it.
  * @property {boolean} encodedTargetHumidity=false - The unit sends `targetHumidity` encoded as (% − 15) / 5, as air conditioners with humidity control do (e.g. Airy Pro); leave off for dehumidifiers
@@ -38,6 +40,8 @@ const CLIENT_OPTIONS = {
     pollingInterval: 3000,
     pollingTimeout: 1000,
     maxNoResponse: 3,
+    recoveryDelay: 0,
+    reopenSocket: true,
     statusBatchSize: 20,
     halfDegree: false,
     encodedTargetHumidity: false,
@@ -65,6 +69,8 @@ const ENV_OPTIONS = {
     pollingInterval: 'GREE_HVAC_POLLING_INTERVAL',
     pollingTimeout: 'GREE_HVAC_POLLING_TIMEOUT',
     maxNoResponse: 'GREE_HVAC_MAX_NO_RESPONSE',
+    recoveryDelay: 'GREE_HVAC_RECOVERY_DELAY',
+    reopenSocket: 'GREE_HVAC_REOPEN_SOCKET',
     statusBatchSize: 'GREE_HVAC_STATUS_BATCH_SIZE',
     halfDegree: 'GREE_HVAC_HALF_DEGREE',
     encodedTargetHumidity: 'GREE_HVAC_ENCODED_TARGET_HUMIDITY',

@@ -21,6 +21,12 @@ this implementation and community reverse-engineering.
 - Discovery is a UDP broadcast (or unicast) probe; control is unicast to the
   device IP.
 - The device also answers on the same socket it received the request from.
+  A bind is not tied to the client's local port: the client re-binds from a
+  new socket (new port) after a lost connection, which some WiFi modules need
+  to recover from a wedged state without a power cycle (`reopenSocket`).
+- The device's address may change (DHCP). The scan is answered from its
+  current address with its MAC (`cid`), so a broadcast scan filtered by MAC
+  finds it again.
 
 ## Encryption
 

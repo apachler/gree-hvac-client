@@ -14,7 +14,9 @@ const DEVICE_KEY = 'FakeUnitKey12345';
  * @param {object} [options.state] vendor properties (code → value)
  * @param {number} [options.maxColumns] status requests with more columns go unanswered
  * @param {string[]} [options.subUnits] indoor unit MACs (makes it a multi-split gateway)
- * @returns {Promise<object>} the running unit: `port`, `state`, `received`, `close()`
+ * @returns {Promise<object>} the running unit: `port`, `state`, `received`
+ *     (each with the sender's `port`), `blockedPorts` (senders it ignores, like
+ *     a WiFi module wedged on one client socket), `close()`
  */
 const startFakeUnit = ({
     cipher = 'ecb',
@@ -31,6 +33,7 @@ const startFakeUnit = ({
         mac,
         state: { ...state },
         received: [],
+        blockedPorts: new Set(),
         port: null,
         close: () => new Promise(resolve => socket.close(resolve)),
     };
@@ -64,7 +67,10 @@ const startFakeUnit = ({
     };
 
     socket.on('message', (buffer, rinfo) => {
-        const message = JSON.parse(String(buffer));
+        if (unit.blockedPorts.has(rinfo.port)) {
+            return;
+        }
+        const message = { ...JSON.parse(String(buffer)), port: rinfo.port };
         if (message.t === 'scan') {
             unit.received.push(message);
             return reply(
