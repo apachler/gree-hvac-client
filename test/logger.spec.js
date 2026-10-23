@@ -154,19 +154,30 @@ describe('log line format', () => {
         });
     });
 
-    it('passes the entry through as is in development', () => {
+    it("prints the same line format when the app's NODE_ENV is development", () => {
         jest.isolateModules(() => {
             const env = process.env.NODE_ENV;
             process.env.NODE_ENV = 'development';
+            const write = jest
+                .spyOn(process.stdout, 'write')
+                .mockImplementation(() => true);
+            const consoleLog = jest
+                .spyOn(console, 'log')
+                .mockImplementation(() => {});
             try {
-                const { formats: dev } = require('../src/logger');
-                const entry = { level: 'info', message: 'hi' };
-                expect(dev.vscode.transform(entry)[MESSAGE]).toEqual({
-                    level: 'info',
-                    message: 'hi',
-                });
+                const { createLogger: create } = require('../src/logger');
+                create('info')
+                    .child({ service: 'test', sid: 'abcdefgh' })
+                    .info('one line');
+                const output = [
+                    ...write.mock.calls,
+                    ...consoleLog.mock.calls,
+                ].join('');
+                expect(output).toMatch(/TEST:.*abcdefgh> one line/);
             } finally {
                 process.env.NODE_ENV = env;
+                write.mockRestore();
+                consoleLog.mockRestore();
             }
         });
     });

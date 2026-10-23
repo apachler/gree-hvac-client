@@ -226,9 +226,13 @@ Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git re
 - `package-lock.json` and `README.md` are marked `linguist-generated` in
   `.gitattributes` — `README.md` is regenerated, don't hand-edit it.
 - Workflow triggers: CI runs on every push/PR; releases only on push to master.
+- `scripts/set-git-identity.sh` is a committed SessionStart hook, so it runs
+  for every Claude Code user of a clone. It acts only when origin is
+  `apachler/gree-hvac-client`, and sets the owner's git identity only when no
+  identity is configured (fresh cloud sessions) — never overwrite a
+  contributor's.
 - With the `upstream` remote (inwaar) present, bare `gh` commands resolve to
-  the upstream repo. The SessionStart hook (`scripts/set-git-identity.sh`)
-  pins the fork as gh's default; if `gh repo set-default --view` still shows
+  the upstream repo. The same hook pins the fork as gh's default; if `gh repo set-default --view` still shows
   inwaar, run `gh repo set-default apachler/gree-hvac-client`. Passing
   `-R apachler/gree-hvac-client` is the safe habit either way.
 - jsdoc's type parser rejects TypeScript-only syntax such as optional members

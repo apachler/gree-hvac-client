@@ -66,14 +66,11 @@ const formats = {
 
         return `${line} ${info.message}`;
     }),
-    vscode: winston.format.printf(info =>
-        Object.fromEntries(Object.entries(info))
-    ),
 };
 
-const env = process.env.NODE_ENV;
-const isDevelopment = env === 'development';
-const isTest = env === 'test';
+// Only Jest sets this to 'test': keeps the suite's output clean. The app's
+// own NODE_ENV (development, production) leaves the format alone.
+const isTest = process.env.NODE_ENV === 'test';
 
 const LOG_LEVELS = [
     'error',
@@ -165,9 +162,8 @@ const createLogger = level =>
                                 'version',
                             ],
                         }),
-                        ...(isDevelopment
-                            ? [formats.vscode]
-                            : [winston.format.colorize(), formats.print])
+                        winston.format.colorize(),
+                        formats.print
                     ),
                 }),
             ],
