@@ -1,5 +1,4 @@
 const assert = require('assert');
-const { EventEmitter } = require('stream');
 
 const { Client } = require('../src/client');
 const {
@@ -11,7 +10,7 @@ const {
 /**
  * Promisify EventEmitter error events
  *
- * @param {EventEmitter} emitter
+ * @param {import('events').EventEmitter} emitter
  */
 function onceError(emitter) {
     return new Promise((_, reject) => {

@@ -5,13 +5,9 @@ on:
     branches:
       - master
 
-# semantic-release needs to push the release commit + tag, create the GitHub
-# Release (with the packed .tgz asset), and comment on released issues/PRs.
-# No npm publish — this fork ships via Git + GitHub Releases only.
+# Read-only by default; the release job below gets the write scopes it needs.
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 # Never cancel an in-flight release.
 concurrency:
@@ -23,11 +19,18 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     environment: release
+    # semantic-release needs to push the release commit + tag, create the GitHub
+    # Release (with the packed .tgz asset), and comment on released issues/PRs.
+    # No npm publish — this fork ships via Git + GitHub Releases only.
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           # semantic-release >= 25 requires Node ^22.14 || >= 24.10
           node-version: 24
