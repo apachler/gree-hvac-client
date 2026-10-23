@@ -49,7 +49,11 @@ describe('Bind timeout', () => {
         SUT.connect().catch(() => {});
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+        // a test that leaves its client connected would otherwise keep its
+        // timers armed into the next test (shared fake clock, and the 'error'
+        // handler pushes into the reassigned `errors`)
+        await SUT.disconnect().catch(() => {});
         jest.restoreAllMocks();
     });
 
