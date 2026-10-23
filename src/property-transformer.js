@@ -191,6 +191,18 @@ const ENCODED_HUMIDITY_TRANSFORMER = {
     toVendor: value => Math.round((value - 15) / 5),
 };
 
+/**
+ * `object[key]` for own properties only: names come from the device and the
+ * caller, and `constructor` or `__proto__` must not resolve to built-ins.
+ *
+ * @param {object} object
+ * @param {string} key
+ * @returns {unknown} the value, or undefined when not an own property
+ * @private
+ */
+const own = (object, key) =>
+    Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined;
+
 const readOnly = (property, fromVendor = value => value) => ({
     fromVendor,
     toVendor: function () {
@@ -261,7 +273,7 @@ class PropertyTransformer {
     fromVendor(properties, state = {}) {
         const ret = {};
         for (const [property, value] of Object.entries(properties)) {
-            const reversedProperty = this._reversedProperties[property];
+            const reversedProperty = own(this._reversedProperties, property);
             // Skip vendor codes this client doesn't model — e.g. the `SlpMod`
             // companion echoed back in a set-confirmation, or extra fields a
             // device returns. Mapping them would throw on the unknown key.
@@ -303,9 +315,13 @@ class PropertyTransformer {
     toVendor(properties, state = {}) {
         const ret = {};
         for (const [property, value] of Object.entries(properties)) {
+            const code = own(this._properties, property);
+            if (code === undefined) {
+                throw new Error(`Unknown property ${property}`);
+            }
             const vendorValue = this._valueToVendor(property, value);
-            ret[this._properties[property]] = vendorValue;
-            const companions = PROPERTY_VENDOR_COMPANIONS[property];
+            ret[code] = vendorValue;
+            const companions = own(PROPERTY_VENDOR_COMPANIONS, property);
             if (companions) {
                 for (const companion of companions) {
                     ret[companion] = vendorValue;
@@ -355,14 +371,15 @@ class PropertyTransformer {
     }
 
     _valueFromVendor(property, value) {
-        const reversedValue = this._reversedValues[property][value] || value;
+        const reversedValue =
+            own(own(this._reversedValues, property) || {}, value) ?? value;
         return this._getValueTransformer(property).fromVendor(reversedValue);
     }
 
     _valueToVendor(property, value) {
-        const values = this._values[property] || {};
+        const values = own(this._values, property) || {};
         return this._getValueTransformer(property).toVendor(
-            values[value] !== undefined ? values[value] : value
+            own(values, value) ?? value
         );
     }
 
@@ -371,7 +388,7 @@ class PropertyTransformer {
             return ENCODED_HUMIDITY_TRANSFORMER;
         }
         return (
-            PROPERTY_VALUE_TRANSFORMERS[property] ||
+            own(PROPERTY_VALUE_TRANSFORMERS, property) ||
             NOOP_PROPERTY_VALUE_TRANSFORMER
         );
     }

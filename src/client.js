@@ -1766,8 +1766,9 @@ class Client extends EventEmitter {
         const oldProperties = clone(this._properties);
         const newProperties = {};
         pack.cols.forEach((col, i) => {
-            // a cut-short answer may carry a column without a name
-            if (!col || i >= pack.dat.length) {
+            // a cut-short answer may carry a column without a name; a
+            // `__proto__` one would replace the object's prototype
+            if (!col || col === '__proto__' || i >= pack.dat.length) {
                 return;
             }
             newProperties[col] = pack.dat[i];
@@ -1874,7 +1875,7 @@ class Client extends EventEmitter {
 
         const updatedProperties = {};
         pack.opt.forEach((opt, i) => {
-            if (i >= values.length) {
+            if (opt === '__proto__' || i >= values.length) {
                 return;
             }
             this._properties[opt] = updatedProperties[opt] = values[i];

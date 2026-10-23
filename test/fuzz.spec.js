@@ -22,7 +22,9 @@ describe('Fuzzing', () => {
         let SUT;
         const device = new EcbCipher('FuzzDeviceKey123');
 
-        beforeEach(() => {
+        // A fresh client per run, so a counterexample reproduces on its own
+        const reset = () => {
+            SUT?._dispose();
             SUT = new Client({ autoConnect: false, poll: false });
             SUT.on('error', () => {});
             // bound to a device, with a socket that swallows every send
@@ -32,7 +34,9 @@ describe('Fuzzing', () => {
             SUT._cid = 'f4911e000001';
             SUT._bound = true;
             SUT._encryptionService._activeCipher.setKey('FuzzDeviceKey123');
-        });
+        };
+
+        beforeEach(reset);
 
         afterEach(() => {
             SUT._dispose();
@@ -40,6 +44,7 @@ describe('Fuzzing', () => {
         });
 
         const expectOnlyClientErrors = async buffer => {
+            reset();
             try {
                 await SUT._handleResponse(Buffer.from(buffer));
             } catch (error) {
@@ -73,9 +78,39 @@ describe('Fuzzing', () => {
             const pack = fc.record(
                 {
                     t: fc.constantFrom('dat', 'res', 'subList', 'weird', 'dev'),
-                    cols: value,
+                    // vendor codes the client knows, and names that clash
+                    // with Object.prototype
+                    cols: fc.oneof(
+                        value,
+                        fc.array(
+                            fc.constantFrom(
+                                'Pow',
+                                'SetTem',
+                                'TemUn',
+                                'TemRec',
+                                'Add0.5',
+                                'OutEnvTem',
+                                'LigSen',
+                                'hid',
+                                'constructor',
+                                'toString',
+                                '__proto__',
+                                'hasOwnProperty'
+                            )
+                        )
+                    ),
+                    opt: fc.oneof(
+                        value,
+                        fc.array(
+                            fc.constantFrom(
+                                'Pow',
+                                'Lig',
+                                'constructor',
+                                '__proto__'
+                            )
+                        )
+                    ),
                     dat: value,
-                    opt: value,
                     val: value,
                     p: value,
                     list: value,
