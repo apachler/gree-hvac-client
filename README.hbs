@@ -169,7 +169,8 @@ node node_modules/gree-hvac-client/example/probe.js 192.168.7.60
 
 ### Connection loss and reconnect
 
-The client recovers from the device dropping off WiFi on its own:
+The client recovers from the device dropping off WiFi on its own, and is
+meant to run unattended for months:
 
 - A short outage heals by itself: polling continues and the device answers
   again with the same key.
@@ -177,19 +178,40 @@ The client recovers from the device dropping off WiFi on its own:
   starts over with scan + bind. This recovers a device that came back
   re-paired with a **new key** (MODE+WIFI resets it), which silently drops
   requests encrypted with the old one. `connect` is emitted again once bound.
+- Every new attempt, and the recovery after a socket error, runs on a **new
+  UDP socket** (`reopenSocket`, on by default): some WiFi modules only recover
+  from a wedged state that way, short of a power cycle.
+- `recoveryDelay` (default 0, i.e. at once) pauses that long before re-scanning
+  a device that stopped answering, so a struggling module gets a break from
+  scan/bind traffic. Nothing is sent during the pause, and `getProperties()`
+  rejects with `ClientNotConnectedError`.
 - While the device stays unreachable, connect attempts back off exponentially
-  from `connectTimeout` up to `reconnectMaxDelay`, emitting a
-  `ClientConnectTimeoutError` per attempt.
+  from `connectTimeout` (or `recoveryDelay` after a lost connection) up to
+  `reconnectMaxDelay`, and the back-off starts over once bound.
 - With a broadcast `host` plus the device `mac`, the device is rediscovered by
-  its MAC on every reconnect, so a DHCP address change is followed. With a
-  unicast `host`, give the AC a fixed address (DHCP reservation).
+  its MAC on every reconnect, so a DHCP address change is followed: polls to
+  the old address go unanswered, and the re-scan finds the unit at its new
+  one. With a unicast `host`, give the AC a fixed address (DHCP reservation).
+
+Each new attempt emits `reconnecting` with `{attempt, delayMs, reason}`, where
+`reason` is `connect_timeout`, `no_response` or `socket_error`. Every `error`
+is informational: the client keeps recovering until `disconnect()` (only with
+`reopenSocket: false` does a `ClientSocketError` leave the socket dead). A
+`ClientConnectTimeoutError` is followed by `reconnecting` and the next attempt.
+After `disconnect()` nothing fires any more: no timer, and no event but
+`disconnect`.
 
 ```javascript
 const client = new Gree.Client({
     host: '192.168.7.255',
     mac: 'f4911e000001',
+    recoveryDelay: 30000,
+    reconnectMaxDelay: 300000,
 });
 client.on('error', error => console.error(error.message));
+client.on('reconnecting', ({ attempt, delayMs, reason }) =>
+    console.log(`reconnect #${attempt} in ${delayMs} ms (${reason})`)
+);
 ```
 
 ## Properties

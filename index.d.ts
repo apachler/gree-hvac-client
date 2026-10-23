@@ -172,6 +172,13 @@ export interface ClientOptions {
     pollingTimeout: number;
     /** Re-scan and re-bind after this many consecutive `no_response` events, 0 disables (3) */
     maxNoResponse: number;
+    /**
+     * Pause before re-scanning a device that stopped answering; later
+     * attempts back off from it up to `reconnectMaxDelay` (0 ms: at once)
+     */
+    recoveryDelay: number;
+    /** New UDP socket for every reconnect attempt and after a socket error (true) */
+    reopenSocket: boolean;
     /** Most vendor codes per status request; more are split over several (20) */
     statusBatchSize: number;
     /** Celsius setpoints in half degrees, for firmwares with `Add0.5` (false) */
@@ -284,12 +291,26 @@ export declare class ClientNoResponseError extends ClientError {}
 /** An unknown or read-only property, or a value the unit does not take */
 export declare class ClientInvalidPropertyError extends ClientError {}
 
+export type ReconnectReason = 'connect_timeout' | 'no_response' | 'socket_error';
+
+export interface ReconnectInfo {
+    /** Connect attempt about to start: counts up while attempts fail, 1 when a bound device stopped answering */
+    attempt: number;
+    /** How long until its scan is sent (ms) */
+    delayMs: number;
+    reason: ReconnectReason;
+}
+
 export interface ClientEvents {
     connect: [client: Client];
     update: [updated: PropertyMap, properties: PropertyMap, client: Client];
     success: [updated: PropertyMap, properties: PropertyMap, client: Client];
     no_response: [client: Client];
+    /** The client starts over with scan + bind */
+    reconnecting: [info: ReconnectInfo];
+    /** Informational: the client keeps recovering until disconnect() */
     error: [error: ClientError];
+    /** Nothing is emitted after it until the next connect() */
     disconnect: [];
 }
 

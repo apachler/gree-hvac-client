@@ -204,6 +204,39 @@ describe('End to end (real UDP)', () => {
             psw: 'secret',
             ssid: 'home',
             t: 'wlan',
+            port: expect.any(Number),
+        });
+    });
+
+    it('recovers a unit wedged on its socket by re-binding from a new one', async () => {
+        await connect(
+            {},
+            {
+                poll: true,
+                pollingInterval: 100,
+                pollingTimeout: 80,
+                maxNoResponse: 2,
+            }
+        );
+        const firstPort = unit.received.at(-1).port;
+        const reconnecting = [];
+        client.on('reconnecting', info => reconnecting.push(info));
+        const reconnected = new Promise(resolve =>
+            client.once('connect', resolve)
+        );
+
+        // the module stops answering the client's socket, and only that one
+        unit.blockedPorts.add(firstPort);
+
+        await reconnected;
+        expect(reconnecting).toEqual([
+            { attempt: 1, delayMs: 0, reason: 'no_response' },
+        ]);
+        const scans = unit.received.filter(m => m.t === 'scan');
+        expect(scans).toHaveLength(2);
+        expect(scans[1].port).not.toBe(firstPort);
+        await expect(client.getProperties()).resolves.toMatchObject({
+            power: 'on',
         });
     });
 });

@@ -169,7 +169,8 @@ node node_modules/gree-hvac-client/example/probe.js 192.168.7.60
 
 ### Connection loss and reconnect
 
-The client recovers from the device dropping off WiFi on its own:
+The client recovers from the device dropping off WiFi on its own, and is
+meant to run unattended for months:
 
 - A short outage heals by itself: polling continues and the device answers
   again with the same key.
@@ -177,19 +178,40 @@ The client recovers from the device dropping off WiFi on its own:
   starts over with scan + bind. This recovers a device that came back
   re-paired with a **new key** (MODE+WIFI resets it), which silently drops
   requests encrypted with the old one. `connect` is emitted again once bound.
+- Every new attempt, and the recovery after a socket error, runs on a **new
+  UDP socket** (`reopenSocket`, on by default): some WiFi modules only recover
+  from a wedged state that way, short of a power cycle.
+- `recoveryDelay` (default 0, i.e. at once) pauses that long before re-scanning
+  a device that stopped answering, so a struggling module gets a break from
+  scan/bind traffic. Nothing is sent during the pause, and `getProperties()`
+  rejects with `ClientNotConnectedError`.
 - While the device stays unreachable, connect attempts back off exponentially
-  from `connectTimeout` up to `reconnectMaxDelay`, emitting a
-  `ClientConnectTimeoutError` per attempt.
+  from `connectTimeout` (or `recoveryDelay` after a lost connection) up to
+  `reconnectMaxDelay`, and the back-off starts over once bound.
 - With a broadcast `host` plus the device `mac`, the device is rediscovered by
-  its MAC on every reconnect, so a DHCP address change is followed. With a
-  unicast `host`, give the AC a fixed address (DHCP reservation).
+  its MAC on every reconnect, so a DHCP address change is followed: polls to
+  the old address go unanswered, and the re-scan finds the unit at its new
+  one. With a unicast `host`, give the AC a fixed address (DHCP reservation).
+
+Each new attempt emits `reconnecting` with `{attempt, delayMs, reason}`, where
+`reason` is `connect_timeout`, `no_response` or `socket_error`. Every `error`
+is informational: the client keeps recovering until `disconnect()` (only with
+`reopenSocket: false` does a `ClientSocketError` leave the socket dead). A
+`ClientConnectTimeoutError` is followed by `reconnecting` and the next attempt.
+After `disconnect()` nothing fires any more: no timer, and no event but
+`disconnect`.
 
 ```javascript
 const client = new Gree.Client({
     host: '192.168.7.255',
     mac: 'f4911e000001',
+    recoveryDelay: 30000,
+    reconnectMaxDelay: 300000,
 });
 client.on('error', error => console.error(error.message));
+client.on('reconnecting', ({ attempt, delayMs, reason }) =>
+    console.log(`reconnect #${attempt} in ${delayMs} ms (${reason})`)
+);
 ```
 
 ## Properties
@@ -394,7 +416,7 @@ Control GREE HVAC device by getting and setting its properties
 
 **Kind**: global class  
 **Extends**: <code>EventEmitter</code>  
-**Emits**: [<code>connect</code>](#Client+event_connect), [<code>update</code>](#Client+event_update), [<code>success</code>](#Client+event_success), [<code>no\_response</code>](#Client+event_no_response), [<code>error</code>](#Client+event_error), [<code>disconnect</code>](#Client+event_disconnect)  
+**Emits**: [<code>connect</code>](#Client+event_connect), [<code>update</code>](#Client+event_update), [<code>success</code>](#Client+event_success), [<code>no\_response</code>](#Client+event_no_response), [<code>reconnecting</code>](#Client+event_reconnecting), [<code>error</code>](#Client+event_error), [<code>disconnect</code>](#Client+event_disconnect)  
 
 * [Client](#Client) ⇐ <code>EventEmitter</code>
     * [new Client(options)](#new_Client_new)
@@ -418,6 +440,7 @@ Control GREE HVAC device by getting and setting its properties
         * ["success" (updated, properties, client)](#Client+event_success)
         * ["update" (updated, properties, client)](#Client+event_update)
         * ["error" (error)](#Client+event_error)
+        * ["reconnecting" (info)](#Client+event_reconnecting)
         * ["disconnect"](#Client+event_disconnect)
     * _static_
         * [.discover([options])](#Client.discover) ⇒ <code>Promise.&lt;Array.&lt;DiscoveredDevice&gt;&gt;</code>
@@ -454,7 +477,13 @@ Connect to a HVAC device and start polling status changes by default
 <a name="Client+disconnect"></a>
 
 ### client.disconnect() ⇒ <code>Promise</code>
-Disconnect from a HVAC device and stop status polling
+Disconnect from a HVAC device and stop status polling.
+
+Final until the next `connect()`: once called, no timer of the client
+fires and no event is emitted but `disconnect` itself (no `error`, no
+`reconnecting`, no late `update`). Queued set requests and pending
+`getProperties()`/`getVendorProperties()` calls reject with
+`ClientNotConnectedError`, as does a second `disconnect()`.
 
 **Kind**: instance method of [<code>Client</code>](#Client)  
 **Emits**: [<code>disconnect</code>](#Client+event_disconnect)  
@@ -734,11 +763,31 @@ Emitted when an error happens
 
 It is important to subscribe to the `error` event, otherwise the process will be terminated
 
+Errors are informational: the client keeps connecting, polling and
+recovering by itself until `disconnect()` (with `reopenSocket` off, a
+`ClientSocketError` leaves the socket dead). A `ClientConnectTimeoutError`
+is followed by a `reconnecting` event and the next attempt.
+
 **Kind**: event emitted by [<code>Client</code>](#Client)  
 
 | Param | Type |
 | --- | --- |
 | error | [<code>ClientError</code>](#ClientError) | 
+
+<a name="Client+event_reconnecting"></a>
+
+### "reconnecting" (info)
+Emitted when the client starts over with scan + bind: a connect attempt
+timed out, the device missed `maxNoResponse` polls, or the socket failed
+
+**Kind**: event emitted by [<code>Client</code>](#Client)  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| info | <code>object</code> |  |
+| info.attempt | <code>number</code> | Number of the connect attempt about to start: counts up while attempts fail, starts over at `1` when a bound device stopped answering |
+| info.delayMs | <code>number</code> | How long until its scan is sent (ms) |
+| info.reason | <code>string</code> | `connect_timeout`, `no_response` or `socket_error` |
 
 <a name="Client+event_disconnect"></a>
 
@@ -961,6 +1010,8 @@ Client options
 | pollingInterval | <code>number</code> | <code>3000</code> | Device properties polling interval |
 | pollingTimeout | <code>number</code> | <code>1000</code> | Device properties polling timeout, emits `no_response` events in case of no response from HVAC device for a status request |
 | maxNoResponse | <code>number</code> | <code>3</code> | Re-scan and re-bind the device after this many consecutive `no_response` events (the device may have dropped off WiFi, been re-paired with a new key or moved to another address). `0` disables it. |
+| recoveryDelay | <code>number</code> | <code>0</code> | Pause (ms) before re-scanning a device that stopped answering (see `maxNoResponse`), so a struggling WiFi module gets time to recover instead of scan/bind traffic. Later attempts then back off from it (doubling up to `reconnectMaxDelay`, or `recoveryDelay` when that is longer). `0` re-scans at once. |
+| reopenSocket | <code>boolean</code> | <code>true</code> | Open a new UDP socket (new local port) for every reconnect attempt and after a socket error: some WiFi modules only recover from a wedged state that way, short of a power cycle. With `false` the client keeps its first socket. |
 | statusBatchSize | <code>number</code> | <code>20</code> | Most vendor codes asked for in one status request; more are split over several requests (some firmwares stop answering above ~29 codes or ~800 bytes) |
 | halfDegree | <code>boolean</code> | <code>false</code> | Celsius setpoints in half degrees (e.g. 23.5), for firmwares that carry the half degree in `Add0.5`. Leave off unless your unit shows half degrees: other firmwares ignore it. |
 | encodedTargetHumidity | <code>boolean</code> | <code>false</code> | The unit sends `targetHumidity` encoded as (% − 15) / 5, as air conditioners with humidity control do (e.g. Airy Pro); leave off for dehumidifiers |
