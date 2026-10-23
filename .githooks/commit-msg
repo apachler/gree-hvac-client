@@ -1,0 +1,52 @@
+#!/bin/sh
+# Commit-msg hook: enforce a Conventional-Commit subject line.
+#
+# Zero-dependency on purpose (no commitlint / transitive tree) — mirrors the
+# audit-surface ethos of this repo. PR titles are still the authoritative gate
+# for releases (squash-merge), so this is a local convenience that keeps
+# non-squash / direct-to-master history clean.
+#
+# Installed by the npm "prepare" script (git config core.hooksPath .githooks).
+
+# Skip in CI — automated commits (e.g. semantic-release's
+# "chore(release): … [skip ci]") are pushed by workflows and must not be blocked.
+if [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    exit 0
+fi
+
+# Allow opting out for emergency / WIP commits:  GREE_SKIP_LINT=1 git commit ...
+if [ "${GREE_SKIP_LINT:-}" = "1" ]; then
+    echo "[commit-msg] GREE_SKIP_LINT=1 set — skipping commit message check"
+    exit 0
+fi
+
+msg_file="$1"
+
+# First non-empty, non-comment line = the subject git will keep.
+subject=$(grep -v '^#' "$msg_file" | grep -v '^[[:space:]]*$' | head -n1)
+
+# Pass-through for git-generated subjects we don't author by hand.
+case "$subject" in
+    "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*)
+        exit 0
+        ;;
+esac
+
+# type(optional-scope)(optional !): subject
+types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert'
+if printf '%s' "$subject" | grep -Eq "^(${types})(\(.+\))?!?: .+"; then
+    exit 0
+fi
+
+echo "[commit-msg] Commit subject is not a valid Conventional Commit:"
+echo
+echo "    $subject"
+echo
+echo "[commit-msg] Expected:  <type>[optional scope][!]: <description>"
+echo "[commit-msg] Types:      ${types}"
+echo "[commit-msg] Examples:   fix(encryption): handle GCM bind timeout"
+echo "[commit-msg]             feat(client): add reconnectMaxDelay option"
+echo "[commit-msg]             chore(release)!: drop Node 18 support"
+echo
+echo "[commit-msg] Fix the message, or set GREE_SKIP_LINT=1 to commit anyway."
+exit 1
