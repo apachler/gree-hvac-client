@@ -133,6 +133,13 @@ hand-edit `version` or `CHANGELOG.md`** — semantic-release owns them.
 `feat` → minor, `fix` → patch, `build(deps-dev)` (Dependabot) → no release.
 `master` is the only branch: work on a feature branch, squash-merge the PR.
 
+The `master` ruleset blocks deletion and force-pushes and requires a PR with
+passing CI; repo admins bypass it. semantic-release's commit-back gets through
+only because it runs as the owner via the `RELEASE_TOKEN` secret (fine-grained
+PAT, `release` environment) — the built-in `GITHUB_TOKEN` can't bypass rulesets
+on a user-owned repo. **When that PAT expires, releases fail** at the
+"Check RELEASE_TOKEN" step or on push; rotate the secret.
+
 Consumers install the tarball asset (`npm install <release>/…tgz`) or a Git ref
 (`github:apachler/gree-hvac-client#vX.Y.Z`) — see the README.
 
