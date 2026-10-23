@@ -26,6 +26,8 @@ const PROPERTY_VENDOR_CODES = {
     targetHumidity: 'Dwet',
     waterFull: 'DwatFul',
     cleanFilter: 'Dfltr',
+    humidityMode: 'Dmod',
+    lightSensor: 'LigSen',
 };
 
 /**
@@ -44,6 +46,8 @@ const OPTIONAL_VENDOR_CODES = [
     'Dwet',
     'DwatFul',
     'Dfltr',
+    'Dmod',
+    'LigSen',
 ];
 
 /**
@@ -53,6 +57,14 @@ const OPTIONAL_VENDOR_CODES = [
  * @private
  */
 const EXTRA_STATUS_VENDOR_CODES = ['TemRec'];
+
+/**
+ * Some Celsius firmwares carry a half-degree setpoint in `Add0.5` (opt-in,
+ * see the `halfDegree` client option): `SetTem` 23 + `Add0.5` 1 is 23.5 °C.
+ *
+ * @private
+ */
+const HALF_DEGREE_CODE = 'Add0.5';
 
 /**
  * Some friendly properties map to more than one vendor code that must be
@@ -167,6 +179,18 @@ const decodeFahrenheit = (setTem, temRec) => {
     return Math.round(approx);
 };
 
+/**
+ * Air conditioners with humidity control (e.g. Airy Pro) send the target
+ * humidity as `Dwet` = (% − 15) / 5 instead of a plain percentage
+ * (RobHofmann/HomeAssistant-GreeClimateComponent#473).
+ *
+ * @private
+ */
+const ENCODED_HUMIDITY_TRANSFORMER = {
+    fromVendor: value => value * 5 + 15,
+    toVendor: value => Math.round((value - 15) / 5),
+};
+
 const readOnly = (property, fromVendor = value => value) => ({
     fromVendor,
     toVendor: function () {
@@ -200,7 +224,14 @@ const NOOP_PROPERTY_VALUE_TRANSFORMER = {
  * @private
  */
 class PropertyTransformer {
-    constructor() {
+    /**
+     * @param {object} [options] client options
+     * @param {boolean} [options.halfDegree] encode °C setpoints with `Add0.5`
+     * @param {boolean} [options.encodedTargetHumidity] `Dwet` is (% − 15) / 5
+     */
+    constructor(options = {}) {
+        this._halfDegree = Boolean(options.halfDegree);
+        this._encodedTargetHumidity = Boolean(options.encodedTargetHumidity);
         this._properties = PROPERTY_VENDOR_CODES;
         this._values = PROPERTY_VENDOR_VALUE;
         this._reversedProperties = this._reverseProperties();
@@ -247,6 +278,12 @@ class PropertyTransformer {
                 properties.SetTem,
                 'TemRec' in properties ? properties.TemRec : state.TemRec
             );
+        } else if ('SetTem' in properties && this._halfDegree) {
+            const half =
+                HALF_DEGREE_CODE in properties
+                    ? properties[HALF_DEGREE_CODE]
+                    : state[HALF_DEGREE_CODE];
+            ret.temperature = properties.SetTem + (half === 1 ? 0.5 : 0);
         }
         return ret;
     }
@@ -278,6 +315,17 @@ class PropertyTransformer {
         if ('SetTem' in ret && this._isFahrenheit(ret, state)) {
             Object.assign(ret, encodeFahrenheit(ret.SetTem));
             ret.TemUn = FAHRENHEIT_UNIT;
+        } else if ('SetTem' in ret && this._halfDegree) {
+            const whole = Math.floor(ret.SetTem);
+            ret[HALF_DEGREE_CODE] = ret.SetTem - whole >= 0.5 ? 1 : 0;
+            ret.SetTem = whole;
+        }
+        // The light sensor only acts while the display is on
+        if (
+            ret.LigSen === PROPERTY_VENDOR_VALUE.lightSensor.on &&
+            !('Lig' in ret)
+        ) {
+            ret.Lig = PROPERTY_VENDOR_VALUE.lights.on;
         }
         return ret;
     }
@@ -295,6 +343,7 @@ class PropertyTransformer {
         return [
             ...Object.values(this._properties),
             ...EXTRA_STATUS_VENDOR_CODES,
+            ...(this._halfDegree ? [HALF_DEGREE_CODE] : []),
         ].filter(
             code => !OPTIONAL_VENDOR_CODES.includes(code) || supported.has(code)
         );
@@ -318,6 +367,9 @@ class PropertyTransformer {
     }
 
     _getValueTransformer(property) {
+        if (property === 'targetHumidity' && this._encodedTargetHumidity) {
+            return ENCODED_HUMIDITY_TRANSFORMER;
+        }
         return (
             PROPERTY_VALUE_TRANSFORMERS[property] ||
             NOOP_PROPERTY_VALUE_TRANSFORMER
@@ -351,4 +403,5 @@ module.exports = {
     encodeFahrenheit,
     decodeFahrenheit,
     OPTIONAL_VENDOR_CODES,
+    HALF_DEGREE_CODE,
 };

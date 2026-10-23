@@ -142,9 +142,11 @@ describe('Optional properties', () => {
 
         it('probes each optional code once after binding', () => {
             const probes = statusRequests().slice(1);
-            expect(probes.map(msg => msg.cols)).toEqual(
-                OPTIONAL_VENDOR_CODES.map(code => [code])
-            );
+            // ...followed by the firmware id query
+            expect(probes.map(msg => msg.cols)).toEqual([
+                ...OPTIONAL_VENDOR_CODES.map(code => [code]),
+                ['hid'],
+            ]);
         });
 
         it('polls only the codes the unit answered', async () => {

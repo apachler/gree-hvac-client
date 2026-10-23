@@ -25,9 +25,12 @@ export declare const PROPERTY: {
     readonly outdoorTemperature: 'outdoorTemperature';
     readonly humidity: 'humidity';
     readonly errorCode: 'errorCode';
+    /** % on dehumidifiers; ACs with humidity control (e.g. Airy Pro) send Dwet = (% − 15) / 5, see the encodedTargetHumidity option */
     readonly targetHumidity: 'targetHumidity';
     readonly waterFull: 'waterFull';
     readonly cleanFilter: 'cleanFilter';
+    readonly humidityMode: 'humidityMode';
+    readonly lightSensor: 'lightSensor';
 };
 
 type OnOff = { readonly off: 'off'; readonly on: 'on' };
@@ -107,6 +110,13 @@ export declare const VALUE: {
     readonly targetHumidity: NoValues;
     readonly waterFull: OnOff;
     readonly cleanFilter: OnOff;
+    readonly humidityMode: {
+        readonly off: 'off';
+        readonly target: 'target';
+        readonly continuous: 'continuous';
+        readonly smart: 'smart';
+    };
+    readonly lightSensor: OnOff;
 };
 
 export type Property = keyof typeof PROPERTY;
@@ -162,6 +172,15 @@ export interface ClientOptions {
     pollingTimeout: number;
     /** Re-scan and re-bind after this many consecutive `no_response` events, 0 disables (3) */
     maxNoResponse: number;
+    /** Most vendor codes per status request; more are split over several (20) */
+    statusBatchSize: number;
+    /** Celsius setpoints in half degrees, for firmwares with `Add0.5` (false) */
+    halfDegree: boolean;
+    /**
+     * `targetHumidity` is sent as (% − 15) / 5, as air conditioners with
+     * humidity control do, e.g. Airy Pro (false; dehumidifiers send plain %)
+     */
+    encodedTargetHumidity: boolean;
     /** Ask the unit not to beep on commands (false) */
     silent: boolean;
     /** Logging level ('error') */
@@ -192,6 +211,38 @@ export interface DiscoveredDevice {
     subUnits: number;
     /** The full decrypted scan answer (brand, model, ...) */
     pack: Record<string, unknown>;
+}
+
+export interface DeviceInfo {
+    /** Device MAC-address (cid) */
+    mac: string | null;
+    name?: string;
+    /** WiFi module version from the scan answer, e.g. `V1.1.13` */
+    version?: string;
+    mid?: string;
+    model?: string;
+    brand?: string;
+    /** Firmware id, e.g. `362001000762+U-CS532AE(LT)V3.31.bin` */
+    hid?: string;
+    firmwareCode?: string;
+    /** e.g. `U-CS532AE(LT)` */
+    moduleType?: string;
+    /** e.g. `3.31` */
+    firmwareVersion?: string;
+    /** Set when later builds of this firmware dropped local (LAN) control */
+    upgradeWarning?: string;
+}
+
+export interface WifiSetupOptions {
+    ssid: string;
+    /** Some firmwares take at most 31 characters */
+    password: string;
+    /** The unit's address in AP mode (192.168.1.1) */
+    host?: string;
+    port?: number;
+    /** How long to wait for the confirmation (5000 ms) */
+    timeout?: number;
+    logLevel?: LogLevel;
 }
 
 export interface SubUnit {
@@ -243,6 +294,10 @@ export declare class Client extends EventEmitter {
 
     /** Find GREE devices on the network */
     static discover(options?: DiscoverOptions): Promise<DiscoveredDevice[]>;
+    /** Connect a unit in AP (setup) mode to your WiFi network */
+    static configureWifi(
+        options: WifiSetupOptions
+    ): Promise<{ confirmed: boolean; mac?: string }>;
 
     connect(): Promise<Client>;
     disconnect(): Promise<void>;
@@ -255,6 +310,22 @@ export declare class Client extends EventEmitter {
     getProperties(): Promise<PropertyMap>;
     /** List the indoor units of a multi-split system */
     getSubUnits(options?: { timeout?: number }): Promise<SubUnit[]>;
+    /** Read vendor codes the client has no property for, raw */
+    getVendorProperties(
+        codes: string[]
+    ): Promise<Record<string, number | string>>;
+    /** Set vendor codes the client has no property for, raw */
+    setVendorProperties(
+        properties: Record<string, number | string>
+    ): Promise<void>;
+    /** Scan answer plus firmware id, with a warning for cloud-only firmwares */
+    getDeviceInfo(): Promise<DeviceInfo>;
+    /** The unit's clock as `YYYY-MM-DD HH:MM:SS`, undefined without a clock */
+    getClock(): Promise<string | undefined>;
+    /** Set the unit's clock to the local time of `date` (now) */
+    setClock(date?: Date): Promise<void>;
+    /** Rename the device */
+    setName(name: string): Promise<void>;
     getDeviceId(): string | null;
     /** @deprecated use the logLevel option */
     setDebug(enable: boolean): void;

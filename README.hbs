@@ -199,25 +199,54 @@ client.on('error', error => console.error(error.message));
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
 | **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
-| **targetHumidity** | any integer | Target humidity, raw: % on dehumidifiers, encoded on some ACs (see [PROTOCOL.md](docs/PROTOCOL.md#properties); optional) |
+| **targetHumidity** | any integer | Target humidity in % (optional). Air conditioners with humidity control (e.g. Airy Pro) encode it as % = 5 × `Dwet` + 15: set the `encodedTargetHumidity` option for those |
 | **waterFull** | _off_, _on_ | Water tank is full. (Read-only, dehumidifiers, optional) |
 | **cleanFilter** | _off_, _on_ | Filter needs cleaning. (Read-only, dehumidifiers, optional) |
+| **humidityMode** | _off_, _target_, _continuous_, _smart_ | Humidity control of air conditioners that have it; _continuous_ only in Dry, _smart_ only in Cool mode (optional) |
+| **lightSensor** | _off_, _on_ | Display brightness follows the room light; turning it on also turns the `lights` on (optional) |
 
 _Optional_ properties exist only on some units: the client probes for them
 after connecting and only reports the ones the unit answers. To stop the unit
-beeping on every command, use the `silent` option.
+beeping on every command, use the `silent` option. For half-degree °C
+setpoints (e.g. `23.5`) on firmwares that support them, set `halfDegree`.
+
+## More device access
+
+```javascript
+// Firmware id, and a warning for firmwares whose later builds are cloud-only
+const info = await client.getDeviceInfo();
+if (info.upgradeWarning) console.warn(info.upgradeWarning);
+
+// Codes this client has no property for, raw (UV-C, self-clean, compressor, ...)
+const {UvcControl} = await client.getVendorProperties(['UvcControl']);
+await client.setVendorProperties({UvcControl: 1});
+
+await client.setClock();          // the unit's clock, for its own timers
+await client.setName('Bedroom');  // the name the app and discover() show
+```
+
+There is no way to feed an external temperature sensor to the unit over the
+LAN (iFeel works from the IR remote only); see
+[docs/PROTOCOL.md](docs/PROTOCOL.md#external-temperature-sensor-ifeel).
 
 ## Configuring HVAC WiFi
 
 1. Make sure your HVAC is running in AP mode. You can reset the WiFi config by pressing MODE +WIFI (or MODE + TURBO) on the AC remote for 5s.
-2. Connect with the AP wifi network (the SSID name should be a 8-character alphanumeric, e.g. "u34k5l166").
-3. Run the following in your UNIX terminal:
+2. Connect with the AP wifi network (the SSID name should be a 8-character alphanumeric, e.g. "u34k5l166"; the password is usually `12345678`).
+3. Send your network's credentials:
+
+```javascript
+const {confirmed} = await Gree.Client.configureWifi({ssid: 'YOUR_WIFI_SSID', password: 'YOUR_WIFI_PASSWORD'});
+```
+
+`confirmed` is `false` when the unit sent no confirmation, which some firmwares
+never do: check whether it shows up on your network (`Client.discover()`).
+Some firmwares take passwords of at most 31 characters. Without Node, the same
+packet can be sent with netcat:
 
 ```shell
 echo -n "{\"psw\": \"YOUR_WIFI_PASSWORD\",\"ssid\": \"YOUR_WIFI_SSID\",\"t\": \"wlan\"}" | nc -cu 192.168.1.1 7000
-````
-
-Note: This command may vary depending on your OS (e.g. Linux, macOS, CygWin). If facing problems, please consult the appropriate netcat manual.
+```
 
 ## API Reference
 {{>main}}

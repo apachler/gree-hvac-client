@@ -1,7 +1,7 @@
 /**
  * Hardware check: connect to one unit and print every vendor code it reports,
- * raw and decoded, which optional sensors it answered, and its indoor units
- * when it is a multi-split gateway. Paste the output into an issue when a
+ * raw and decoded, which optional sensors it answered, its firmware id and
+ * clock, and its indoor units when it is a multi-split gateway. Paste the output into an issue when a
  * value looks wrong.
  *
  *     node example/probe.js 192.168.1.42
@@ -79,6 +79,19 @@ const propertyOf = (code, value) =>
                 ', '
             ) || 'none'
         );
+
+        const info = await client.getDeviceInfo();
+        console.log('Device:', {
+            name: info.name,
+            version: info.version,
+            mid: info.mid,
+            hid: info.hid ?? '(not reported)',
+        });
+        if (info.upgradeWarning) {
+            console.warn('WARNING:', info.upgradeWarning);
+        }
+        const clock = await client.getClock().catch(() => undefined);
+        console.log('Clock:', clock ?? '(no answer)');
 
         const units = await client.getSubUnits();
         console.log(

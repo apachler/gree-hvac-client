@@ -17,6 +17,7 @@ index.d.ts                   hand-written TypeScript types (`npm run typecheck` 
 src/
   client.js                  the Client class: discover/bind/poll, get/set properties (EventEmitter)
   client-options.js          option defaults + GREE_HVAC_* env overrides
+  firmware.js                hid parsing + known cloud-only firmware table
   encryption-service.js      AES-ECB (default) + AES-GCM cipher; the bind key exchange
   property.js                PROPERTY (friendly property names)
   property-value.js          VALUE / PROPERTY_VALUE (friendly value enums)
@@ -84,7 +85,14 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   probed once per bind and polled only if answered — a probe reply must not
   count as a poll reply.
 - `Client.discover()` is static and opens its own socket (no bind).
-- `getProperties()` waiters resolve on the next non-probe status reply and
+- Status answers have no request id: `_statusRequests` holds the pending
+  `poll` batches, `probe`s and `query`s (getVendorProperties, getClock, the
+  `hid` query) and `_matchStatusRequest` matches an answer to the oldest one
+  asking for all its columns; an unmatched answer counts as the poll's. Polls
+  are split into `statusBatchSize` batches; the status timeout clears only
+  once every batch answered. Query timers live on the request and
+  `_dispose()` clears them.
+- `getProperties()` waiters resolve once a poll is fully answered and
   reject on `no_response` / `disconnect()`. `getSubUnits()` keeps one pending
   `subList` request in `_subListRequest` (its timer is not one of the four
   refs below; `_dispose()` settles it).

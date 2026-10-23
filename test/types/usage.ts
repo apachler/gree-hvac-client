@@ -57,6 +57,21 @@ void (async () => {
         }
     }
 
+    const info = await client.getDeviceInfo();
+    const warning: string | undefined = info.upgradeWarning;
+    void warning;
+    const raw = await client.getVendorProperties(['UvcControl']);
+    await client.setVendorProperties({ UvcControl: raw.UvcControl ?? 0 });
+    await client.setClock();
+    await client.setProperties({ humidityMode: 'smart', lightSensor: 'on' });
+    const { confirmed } = await Client.configureWifi({
+        ssid: 'home',
+        password: 'secret',
+    });
+    void confirmed;
+    // @ts-expect-error a password is needed
+    void Client.configureWifi({ ssid: 'home' });
+
     const devices = await Client.discover({ host: '192.168.1.255' });
     const gateways = devices.filter(device => device.subUnits > 0);
     for (const unit of await client.getSubUnits()) {

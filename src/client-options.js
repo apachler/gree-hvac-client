@@ -17,6 +17,9 @@
  * @property {number} pollingInterval=3000 - Device properties polling interval
  * @property {number} pollingTimeout=1000 - Device properties polling timeout, emits `no_response` events in case of no response from HVAC device for a status request
  * @property {number} maxNoResponse=3 - Re-scan and re-bind the device after this many consecutive `no_response` events (the device may have dropped off WiFi, been re-paired with a new key or moved to another address). `0` disables it.
+ * @property {number} statusBatchSize=20 - Most vendor codes asked for in one status request; more are split over several requests (some firmwares stop answering above ~29 codes or ~800 bytes)
+ * @property {boolean} halfDegree=false - Celsius setpoints in half degrees (e.g. 23.5), for firmwares that carry the half degree in `Add0.5`. Leave off unless your unit shows half degrees: other firmwares ignore it.
+ * @property {boolean} encodedTargetHumidity=false - The unit sends `targetHumidity` encoded as (% − 15) / 5, as air conditioners with humidity control do (e.g. Airy Pro); leave off for dehumidifiers
  * @property {boolean} silent=false - Ask the unit not to beep when it receives a command (sends the `Buzzer_ON_OFF`/`BuzzerCtrl` flags with every set request; units without a controllable beeper ignore them)
  * @property {string} logLevel=error - Logging level (debug, info, warn, error)
  * @property {boolean} debug=false - Override logLevel to debug, deprecated, use logLevel option
@@ -34,6 +37,9 @@ const CLIENT_OPTIONS = {
     pollingInterval: 3000,
     pollingTimeout: 1000,
     maxNoResponse: 3,
+    statusBatchSize: 20,
+    halfDegree: false,
+    encodedTargetHumidity: false,
     silent: false,
     logLevel: 'error',
     debug: false,
@@ -57,6 +63,9 @@ const ENV_OPTIONS = {
     pollingInterval: 'GREE_HVAC_POLLING_INTERVAL',
     pollingTimeout: 'GREE_HVAC_POLLING_TIMEOUT',
     maxNoResponse: 'GREE_HVAC_MAX_NO_RESPONSE',
+    statusBatchSize: 'GREE_HVAC_STATUS_BATCH_SIZE',
+    halfDegree: 'GREE_HVAC_HALF_DEGREE',
+    encodedTargetHumidity: 'GREE_HVAC_ENCODED_TARGET_HUMIDITY',
     silent: 'GREE_HVAC_SILENT',
     logLevel: 'GREE_HVAC_LOG_LEVEL',
     debug: 'GREE_HVAC_DEBUG',

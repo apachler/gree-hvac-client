@@ -199,25 +199,54 @@ client.on('error', error => console.error(error.message));
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
 | **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
-| **targetHumidity** | any integer | Target humidity, raw: % on dehumidifiers, encoded on some ACs (see [PROTOCOL.md](docs/PROTOCOL.md#properties); optional) |
+| **targetHumidity** | any integer | Target humidity in % (optional). Air conditioners with humidity control (e.g. Airy Pro) encode it as % = 5 × `Dwet` + 15: set the `encodedTargetHumidity` option for those |
 | **waterFull** | _off_, _on_ | Water tank is full. (Read-only, dehumidifiers, optional) |
 | **cleanFilter** | _off_, _on_ | Filter needs cleaning. (Read-only, dehumidifiers, optional) |
+| **humidityMode** | _off_, _target_, _continuous_, _smart_ | Humidity control of air conditioners that have it; _continuous_ only in Dry, _smart_ only in Cool mode (optional) |
+| **lightSensor** | _off_, _on_ | Display brightness follows the room light; turning it on also turns the `lights` on (optional) |
 
 _Optional_ properties exist only on some units: the client probes for them
 after connecting and only reports the ones the unit answers. To stop the unit
-beeping on every command, use the `silent` option.
+beeping on every command, use the `silent` option. For half-degree °C
+setpoints (e.g. `23.5`) on firmwares that support them, set `halfDegree`.
+
+## More device access
+
+```javascript
+// Firmware id, and a warning for firmwares whose later builds are cloud-only
+const info = await client.getDeviceInfo();
+if (info.upgradeWarning) console.warn(info.upgradeWarning);
+
+// Codes this client has no property for, raw (UV-C, self-clean, compressor, ...)
+const {UvcControl} = await client.getVendorProperties(['UvcControl']);
+await client.setVendorProperties({UvcControl: 1});
+
+await client.setClock();          // the unit's clock, for its own timers
+await client.setName('Bedroom');  // the name the app and discover() show
+```
+
+There is no way to feed an external temperature sensor to the unit over the
+LAN (iFeel works from the IR remote only); see
+[docs/PROTOCOL.md](docs/PROTOCOL.md#external-temperature-sensor-ifeel).
 
 ## Configuring HVAC WiFi
 
 1. Make sure your HVAC is running in AP mode. You can reset the WiFi config by pressing MODE +WIFI (or MODE + TURBO) on the AC remote for 5s.
-2. Connect with the AP wifi network (the SSID name should be a 8-character alphanumeric, e.g. "u34k5l166").
-3. Run the following in your UNIX terminal:
+2. Connect with the AP wifi network (the SSID name should be a 8-character alphanumeric, e.g. "u34k5l166"; the password is usually `12345678`).
+3. Send your network's credentials:
+
+```javascript
+const {confirmed} = await Gree.Client.configureWifi({ssid: 'YOUR_WIFI_SSID', password: 'YOUR_WIFI_PASSWORD'});
+```
+
+`confirmed` is `false` when the unit sent no confirmation, which some firmwares
+never do: check whether it shows up on your network (`Client.discover()`).
+Some firmwares take passwords of at most 31 characters. Without Node, the same
+packet can be sent with netcat:
 
 ```shell
 echo -n "{\"psw\": \"YOUR_WIFI_PASSWORD\",\"ssid\": \"YOUR_WIFI_SSID\",\"t\": \"wlan\"}" | nc -cu 192.168.1.1 7000
-````
-
-Note: This command may vary depending on your OS (e.g. Linux, macOS, CygWin). If facing problems, please consult the appropriate netcat manual.
+```
 
 ## API Reference
 ## Classes
@@ -278,6 +307,9 @@ Note: This command may vary depending on your OS (e.g. Linux, macOS, CygWin). If
 <dt><a href="#DiscoveredDevice">DiscoveredDevice</a> : <code>object</code></dt>
 <dd><p>A device that answered a discovery scan</p>
 </dd>
+<dt><a href="#DeviceInfo">DeviceInfo</a> : <code>object</code></dt>
+<dd><p>What the device tells about itself</p>
+</dd>
 <dt><a href="#SubUnit">SubUnit</a> : <code>object</code></dt>
 <dd><p>An indoor unit of a multi-split system, as listed by the outdoor unit</p>
 </dd>
@@ -300,6 +332,12 @@ Control GREE HVAC device by getting and setting its properties
         * [.setProperties(properties)](#Client+setProperties) ⇒ <code>Promise</code>
         * [.setProperty(property, value)](#Client+setProperty) ⇒ <code>Promise</code>
         * [.getProperties()](#Client+getProperties) ⇒ [<code>Promise.&lt;PropertyMap&gt;</code>](#PropertyMap)
+        * [.getVendorProperties(codes)](#Client+getVendorProperties) ⇒ <code>Promise.&lt;Object.&lt;string, (number\|string)&gt;&gt;</code>
+        * [.setVendorProperties(properties)](#Client+setVendorProperties) ⇒ <code>Promise</code>
+        * [.getDeviceInfo()](#Client+getDeviceInfo) ⇒ [<code>Promise.&lt;DeviceInfo&gt;</code>](#DeviceInfo)
+        * [.getClock()](#Client+getClock) ⇒ <code>Promise.&lt;(string\|undefined)&gt;</code>
+        * [.setClock([date])](#Client+setClock) ⇒ <code>Promise</code>
+        * [.setName(name)](#Client+setName) ⇒ <code>Promise</code>
         * [.getSubUnits([options])](#Client+getSubUnits) ⇒ <code>Promise.&lt;Array.&lt;SubUnit&gt;&gt;</code>
         * [.getDeviceId()](#Client+getDeviceId) ⇒ <code>string</code> \| <code>null</code>
         * ~~[.setDebug(enable)](#Client+setDebug)~~
@@ -311,6 +349,7 @@ Control GREE HVAC device by getting and setting its properties
         * ["disconnect"](#Client+event_disconnect)
     * _static_
         * [.discover([options])](#Client.discover) ⇒ <code>Promise.&lt;Array.&lt;DiscoveredDevice&gt;&gt;</code>
+        * [.configureWifi(options)](#Client.configureWifi) ⇒ <code>Promise.&lt;object&gt;</code>
 
 <a name="new_Client_new"></a>
 
@@ -426,6 +465,96 @@ await client.connect();
 const properties = await client.getProperties();
 console.log(properties.temperature, properties.currentTemperature);
 ```
+<a name="Client+getVendorProperties"></a>
+
+### client.getVendorProperties(codes) ⇒ <code>Promise.&lt;Object.&lt;string, (number\|string)&gt;&gt;</code>
+Read vendor codes the client has no property for (e.g. `UvcControl`,
+`CompressorFqy`, `hid`), raw. Codes the unit does not know are missing
+from the result.
+
+**Kind**: instance method of [<code>Client</code>](#Client)  
+**Returns**: <code>Promise.&lt;Object.&lt;string, (number\|string)&gt;&gt;</code> - code → raw value  
+**Throws**:
+
+- [<code>ClientNotConnectedError</code>](#ClientNotConnectedError) when not connected (yet), or disconnected before the answer
+- [<code>ClientNoResponseError</code>](#ClientNoResponseError) when the device did not answer within `pollingTimeout`
+
+
+| Param | Type | Description |
+| --- | --- | --- |
+| codes | <code>Array.&lt;string&gt;</code> | vendor codes |
+
+**Example**  
+```js
+const {UvcControl} = await client.getVendorProperties(['UvcControl']);
+```
+<a name="Client+setVendorProperties"></a>
+
+### client.setVendorProperties(properties) ⇒ <code>Promise</code>
+Set vendor codes the client has no property for, raw. Use with care:
+the unit takes whatever it gets.
+
+**Kind**: instance method of [<code>Client</code>](#Client)  
+**Emits**: [<code>success</code>](#Client+event_success)  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| properties | <code>Object.&lt;string, (number\|string)&gt;</code> | code → raw value |
+
+**Example**  
+```js
+await client.setVendorProperties({UvcControl: 1});
+```
+<a name="Client+getDeviceInfo"></a>
+
+### client.getDeviceInfo() ⇒ [<code>Promise.&lt;DeviceInfo&gt;</code>](#DeviceInfo)
+What the device tells about itself: the scan answer plus its firmware
+id (`hid`), asked for once per connection
+
+**Kind**: instance method of [<code>Client</code>](#Client)  
+**Throws**:
+
+- [<code>ClientNotConnectedError</code>](#ClientNotConnectedError) when not connected (yet)
+
+**Example**  
+```js
+const info = await client.getDeviceInfo();
+if (info.upgradeWarning) console.warn(info.upgradeWarning);
+```
+<a name="Client+getClock"></a>
+
+### client.getClock() ⇒ <code>Promise.&lt;(string\|undefined)&gt;</code>
+Read the unit's clock (used for its own timers)
+
+**Kind**: instance method of [<code>Client</code>](#Client)  
+**Returns**: <code>Promise.&lt;(string\|undefined)&gt;</code> - local time as `YYYY-MM-DD HH:MM:SS`, undefined if the unit has no clock  
+**Throws**:
+
+- [<code>ClientNotConnectedError</code>](#ClientNotConnectedError) when not connected (yet)
+- [<code>ClientNoResponseError</code>](#ClientNoResponseError) when the device did not answer within `pollingTimeout`
+
+<a name="Client+setClock"></a>
+
+### client.setClock([date]) ⇒ <code>Promise</code>
+Set the unit's clock
+
+**Kind**: instance method of [<code>Client</code>](#Client)  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| [date] | <code>Date</code> | defaults to now; the unit takes the local time of this host |
+
+<a name="Client+setName"></a>
+
+### client.setName(name) ⇒ <code>Promise</code>
+Rename the device (the name the vendor app and `discover()` show)
+
+**Kind**: instance method of [<code>Client</code>](#Client)  
+
+| Param | Type |
+| --- | --- |
+| name | <code>string</code> | 
+
 <a name="Client+getSubUnits"></a>
 
 ### client.getSubUnits([options]) ⇒ <code>Promise.&lt;Array.&lt;SubUnit&gt;&gt;</code>
@@ -561,6 +690,32 @@ const devices = await Gree.Client.discover({host: '192.168.1.255'});
 // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.1.42', version: 'V1.1.13', pack: {...}}]
 
 const client = new Gree.Client({host: devices[0].address});
+```
+<a name="Client.configureWifi"></a>
+
+### Client.configureWifi(options) ⇒ <code>Promise.&lt;object&gt;</code>
+Connect a unit in AP (setup) mode to your WiFi network, without the
+vendor app. Reset the unit's WiFi first (MODE + WIFI, or MODE + TURBO,
+on the remote for 5 s), join the unit's own WiFi network (named after
+the last digits of its MAC, password usually `12345678`), then call
+this. The unit gets a new device key, so a client bound before re-binds.
+
+**Kind**: static method of [<code>Client</code>](#Client)  
+**Returns**: <code>Promise.&lt;object&gt;</code> - `{confirmed, mac}`, where `confirmed` is false when the unit sent no confirmation, which some firmwares never do: check whether it joined your network  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| options | <code>object</code> |  |
+| options.ssid | <code>string</code> | Your WiFi network name |
+| options.password | <code>string</code> | Your WiFi password (some firmwares take at most 31 characters) |
+| [options.host] | <code>string</code> | The unit's address in AP mode, `192.168.1.1` by default |
+| [options.port] | <code>number</code> | Defaults to the `port` client option |
+| [options.timeout] | <code>number</code> | How long to wait for the confirmation (ms), 5000 by default |
+| [options.logLevel] | <code>string</code> | Defaults to the `logLevel` client option |
+
+**Example**  
+```js
+await Gree.Client.configureWifi({ssid: 'home', password: 'secret'});
 ```
 <a name="ClientError"></a>
 
@@ -703,6 +858,9 @@ Client options
 | pollingInterval | <code>number</code> | <code>3000</code> | Device properties polling interval |
 | pollingTimeout | <code>number</code> | <code>1000</code> | Device properties polling timeout, emits `no_response` events in case of no response from HVAC device for a status request |
 | maxNoResponse | <code>number</code> | <code>3</code> | Re-scan and re-bind the device after this many consecutive `no_response` events (the device may have dropped off WiFi, been re-paired with a new key or moved to another address). `0` disables it. |
+| statusBatchSize | <code>number</code> | <code>20</code> | Most vendor codes asked for in one status request; more are split over several requests (some firmwares stop answering above ~29 codes or ~800 bytes) |
+| halfDegree | <code>boolean</code> | <code>false</code> | Celsius setpoints in half degrees (e.g. 23.5), for firmwares that carry the half degree in `Add0.5`. Leave off unless your unit shows half degrees: other firmwares ignore it. |
+| encodedTargetHumidity | <code>boolean</code> | <code>false</code> | The unit sends `targetHumidity` encoded as (% − 15) / 5, as air conditioners with humidity control do (e.g. Airy Pro); leave off for dehumidifiers |
 | silent | <code>boolean</code> | <code>false</code> | Ask the unit not to beep when it receives a command (sends the `Buzzer_ON_OFF`/`BuzzerCtrl` flags with every set request; units without a controllable beeper ignore them) |
 | logLevel | <code>string</code> | <code>&quot;error&quot;</code> | Logging level (debug, info, warn, error) |
 | debug | <code>boolean</code> | <code>false</code> | Override logLevel to debug, deprecated, use logLevel option |
@@ -780,6 +938,12 @@ Device properties value constants
 | waterFull.on | <code>string</code> |  |
 | cleanFilter.off | <code>string</code> |  |
 | cleanFilter.on | <code>string</code> |  |
+| humidityMode.off | <code>string</code> |  |
+| humidityMode.target | <code>string</code> | Keep the `targetHumidity` |
+| humidityMode.continuous | <code>string</code> | Dry continuously (dry mode only) |
+| humidityMode.smart | <code>string</code> | Smart dry (cool mode only) |
+| lightSensor.off | <code>string</code> |  |
+| lightSensor.on | <code>string</code> |  |
 
 <a name="PROPERTY"></a>
 
@@ -813,7 +977,9 @@ Device properties constants
 | outdoorTemperature | <code>string</code> | Get the outdoor unit's temperature sensor in °C (read-only; `0` when the unit has no such sensor) |
 | humidity | <code>string</code> | Get the indoor relative humidity in % (read-only; only units with a humidity sensor report it) |
 | errorCode | <code>string</code> | Get the unit's fault code, `0` when there is no fault (read-only) |
-| targetHumidity | <code>string</code> | Target humidity, raw `Dwet`: % on dehumidifiers; some air conditioners encode it as 5 × value + 15 % (see docs/PROTOCOL.md) |
+| targetHumidity | <code>string</code> | Target relative humidity in % (dehumidifiers, and air conditioners with humidity control — set the `encodedTargetHumidity` option for those, e.g. Airy Pro) |
+| humidityMode | <code>string</code> | Humidity control of air conditioners that have it (e.g. Airy Pro): `continuous` only in dry mode, `smart` only in cool mode |
+| lightSensor | <code>string</code> | Dims the display automatically by the room light (not available on all units; turning it on also turns the `lights` on) |
 | waterFull | <code>string</code> | Get whether the water tank is full (read-only, dehumidifiers only) |
 | cleanFilter | <code>string</code> | Get whether the filter needs cleaning (read-only, dehumidifiers only) |
 
@@ -837,6 +1003,28 @@ A device that answered a discovery scan
 | [version] | <code>string</code> | Firmware version, e.g. `V1.1.13` |
 | subUnits | <code>number</code> | Number of indoor units behind it when it is the WiFi module of a multi-split outdoor unit, else `0` (list them with `getSubUnits()`) |
 | pack | <code>object</code> | The full decrypted scan answer (brand, model, ...) |
+
+<a name="DeviceInfo"></a>
+
+## DeviceInfo : <code>object</code>
+What the device tells about itself
+
+**Kind**: global typedef  
+**Properties**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| mac | <code>string</code> \| <code>null</code> | Device MAC-address (`cid`) |
+| [name] | <code>string</code> | Device name as configured in the vendor app |
+| [version] | <code>string</code> | WiFi module version from the scan answer, e.g. `V1.1.13` |
+| [mid] | <code>string</code> | Model id |
+| [model] | <code>string</code> |  |
+| [brand] | <code>string</code> |  |
+| [hid] | <code>string</code> | Firmware id, e.g. `362001000762+U-CS532AE(LT)V3.31.bin` (not reported by every unit) |
+| [firmwareCode] | <code>string</code> | Leading digits of `hid` |
+| [moduleType] | <code>string</code> | WiFi module type from `hid`, e.g. `U-CS532AE(LT)` |
+| [firmwareVersion] | <code>string</code> | Firmware version from `hid`, e.g. `3.31` |
+| [upgradeWarning] | <code>string</code> | Set when later builds of this firmware are known to have dropped local (LAN) control |
 
 <a name="SubUnit"></a>
 

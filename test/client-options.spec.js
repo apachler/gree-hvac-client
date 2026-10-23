@@ -15,6 +15,8 @@ describe('Client options', () => {
               "bindTimeout": 1000,
               "connectTimeout": 3000,
               "debug": false,
+              "encodedTargetHumidity": false,
+              "halfDegree": false,
               "host": "1.2.3.4",
               "logLevel": "error",
               "mac": null,
@@ -25,6 +27,7 @@ describe('Client options', () => {
               "port": 1234,
               "reconnectMaxDelay": 30000,
               "silent": false,
+              "statusBatchSize": 20,
               "subUnit": null,
             }
         `);
