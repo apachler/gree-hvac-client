@@ -25,7 +25,7 @@
  * @property {string} outdoorTemperature - Get the outdoor unit's temperature sensor in °C (read-only; `0` when the unit has no such sensor)
  * @property {string} humidity - Get the indoor relative humidity in % (read-only; only units with a humidity sensor report it)
  * @property {string} errorCode - Get the unit's fault code, `0` when there is no fault (read-only)
- * @property {string} targetHumidity - Target relative humidity in % (dehumidifiers only)
+ * @property {string} targetHumidity - Target humidity, raw `Dwet`: % on dehumidifiers; some air conditioners encode it as 5 × value + 15 % (see docs/PROTOCOL.md)
  * @property {string} waterFull - Get whether the water tank is full (read-only, dehumidifiers only)
  * @property {string} cleanFilter - Get whether the filter needs cleaning (read-only, dehumidifiers only)
  */

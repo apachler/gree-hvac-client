@@ -199,7 +199,7 @@ client.on('error', error => console.error(error.message));
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
 | **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
-| **targetHumidity** | any integer | Target relative humidity in % (dehumidifiers, optional) |
+| **targetHumidity** | any integer | Target humidity, raw: % on dehumidifiers, encoded on some ACs (see [PROTOCOL.md](docs/PROTOCOL.md#properties); optional) |
 | **waterFull** | _off_, _on_ | Water tank is full. (Read-only, dehumidifiers, optional) |
 | **cleanFilter** | _off_, _on_ | Filter needs cleaning. (Read-only, dehumidifiers, optional) |
 
@@ -813,7 +813,7 @@ Device properties constants
 | outdoorTemperature | <code>string</code> | Get the outdoor unit's temperature sensor in °C (read-only; `0` when the unit has no such sensor) |
 | humidity | <code>string</code> | Get the indoor relative humidity in % (read-only; only units with a humidity sensor report it) |
 | errorCode | <code>string</code> | Get the unit's fault code, `0` when there is no fault (read-only) |
-| targetHumidity | <code>string</code> | Target relative humidity in % (dehumidifiers only) |
+| targetHumidity | <code>string</code> | Target humidity, raw `Dwet`: % on dehumidifiers; some air conditioners encode it as 5 × value + 15 % (see docs/PROTOCOL.md) |
 | waterFull | <code>string</code> | Get whether the water tank is full (read-only, dehumidifiers only) |
 | cleanFilter | <code>string</code> | Get whether the filter needs cleaning (read-only, dehumidifiers only) |
 

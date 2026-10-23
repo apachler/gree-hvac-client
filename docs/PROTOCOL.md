@@ -135,7 +135,7 @@ Friendly name ⇄ vendor code mapping and value enums, as exposed by
 | `outdoorTemperature` | `OutEnvTem` | integer, `−40` offset | **Read-only** outdoor-unit sensor in °C. `0` = unsupported. Optional. |
 | `humidity` | `DwatSen` | integer % | **Read-only** indoor relative humidity. Optional. |
 | `errorCode` | `AllErr` | integer | **Read-only** fault code, `0` = no fault. Optional. |
-| `targetHumidity` | `Dwet` | integer % | Dehumidifier target humidity. Optional. |
+| `targetHumidity` | `Dwet` | integer, raw | Target humidity, passed through raw. On dehumidifiers it is reported as %; some air conditioners with humidity control (e.g. Airy Pro) encode it as % = 5 × `Dwet` + 15 ([RobHofmann#473](https://github.com/RobHofmann/HomeAssistant-GreeClimateComponent/issues/473)). Optional. |
 | `waterFull` | `DwatFul` | off→0, on→1 | **Read-only** dehumidifier water tank full. Optional. |
 | `cleanFilter` | `Dfltr` | off→0, on→1 | **Read-only** dehumidifier filter needs cleaning. Optional. |
 

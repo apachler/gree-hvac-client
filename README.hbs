@@ -199,7 +199,7 @@ client.on('error', error => console.error(error.message));
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
 | **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
-| **targetHumidity** | any integer | Target relative humidity in % (dehumidifiers, optional) |
+| **targetHumidity** | any integer | Target humidity, raw: % on dehumidifiers, encoded on some ACs (see [PROTOCOL.md](docs/PROTOCOL.md#properties); optional) |
 | **waterFull** | _off_, _on_ | Water tank is full. (Read-only, dehumidifiers, optional) |
 | **cleanFilter** | _off_, _on_ | Filter needs cleaning. (Read-only, dehumidifiers, optional) |
 
