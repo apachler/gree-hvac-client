@@ -25,13 +25,13 @@ self-contained npm tarball; needs no git, no build step, ideal for Docker /
 air-gapped builds):
 
 ```shell
-npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.1.0/gree-hvac-client-4.1.0.tgz
+npm install https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz
 ```
 
 **Or install the Git ref** (npm clones the repo at the tag):
 
 ```shell
-npm install github:apachler/gree-hvac-client#v4.1.0
+npm install github:apachler/gree-hvac-client#v4.2.0
 ```
 
 Either way you can pin it in `package.json`:
@@ -39,7 +39,7 @@ Either way you can pin it in `package.json`:
 ```json
 {
   "dependencies": {
-    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.1.0/gree-hvac-client-4.1.0.tgz"
+    "gree-hvac-client": "https://github.com/apachler/gree-hvac-client/releases/download/v4.2.0/gree-hvac-client-4.2.0.tgz"
   }
 }
 ```
@@ -80,6 +80,17 @@ client.on('no_response', () => {
 
 ```
 
+Find devices on the network:
+
+```javascript
+const Gree = require('gree-hvac-client');
+
+Gree.Client.discover({host: '192.168.7.255'}).then(devices => {
+    // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.7.60', version: 'V1.1.13', pack: {...}}]
+    console.log(devices);
+});
+```
+
 ### Connection loss and reconnect
 
 The client recovers from the device dropping off WiFi on its own:
@@ -112,8 +123,11 @@ client.on('error', error => console.error(error.message));
 
 | Command | Values | Description |
 |-|-|-|
-| **temperature** | any integer |Target setpoint, in `temperatureUnit` |
-| **currentTemperature** | any integer |In degrees Celsius by default. (Read-only) |
+| **temperature** | any integer |Target setpoint, in `temperatureUnit` (whole °F are encoded exactly, see [Fahrenheit setpoints](docs/PROTOCOL.md#fahrenheit-setpoints-temrec)) |
+| **currentTemperature** | any integer |Indoor sensor in °C. (Read-only) |
+| **outdoorTemperature** | any integer |Outdoor sensor in °C, `0` if the unit has none. (Read-only, optional) |
+| **humidity** | any integer |Indoor relative humidity in %. (Read-only, optional) |
+| **errorCode** | any integer |Fault code, `0` = no fault. (Read-only, optional) |
 | **temperatureUnit** | _celsius_, _fahrenheit_ | Unit for `temperature` |
 | **mode** | _auto_, _cool_, _heat_, _dry_, _fan_only_|Operation mode |
 | **fanSpeed** | _auto_, _low_, _mediumLow_, _medium_, _mediumHigh_, _high_ | Fan speed |
@@ -129,6 +143,11 @@ client.on('error', error => console.error(error.message));
 | **sleep** | _off_, _on_ | Sleep mode |
 | **turbo** | _off_, _on_ | Turbo mode |
 | **safetyHeating** | _off_, _on_ | 8°C heating / freeze protection — holds an unoccupied space just above freezing |
+| **antiDirectBlow** | _off_, _on_ | Keeps the air flow from blowing directly at people (optional) |
+
+_Optional_ properties exist only on some units: the client probes for them
+after connecting and only reports the ones the unit answers. To stop the unit
+beeping on every command, use the `silent` option.
 
 ## Configuring HVAC WiFi
 
@@ -195,6 +214,9 @@ Note: This command may vary depending on your OS (e.g. Linux, macOS, CygWin). If
 <dl>
 <dt><a href="#PropertyMap">PropertyMap</a> : <code>Object.&lt;PROPERTY, (PROPERTY_VALUE|number)&gt;</code></dt>
 <dd></dd>
+<dt><a href="#DiscoveredDevice">DiscoveredDevice</a> : <code>object</code></dt>
+<dd><p>A device that answered a discovery scan</p>
+</dd>
 </dl>
 
 <a name="Client"></a>
@@ -208,18 +230,21 @@ Control GREE HVAC device by getting and setting its properties
 
 * [Client](#Client) ⇐ <code>EventEmitter</code>
     * [new Client(options)](#new_Client_new)
-    * [.connect()](#Client+connect) ⇒ <code>Promise</code>
-    * [.disconnect()](#Client+disconnect) ⇒ <code>Promise</code>
-    * [.setProperties(properties)](#Client+setProperties) ⇒ <code>Promise</code>
-    * [.setProperty(property, value)](#Client+setProperty) ⇒ <code>Promise</code>
-    * [.getDeviceId()](#Client+getDeviceId) ⇒ <code>string</code> \| <code>null</code>
-    * ~~[.setDebug(enable)](#Client+setDebug)~~
-    * ["connect"](#Client+event_connect)
-    * ["no_response" (client)](#Client+event_no_response)
-    * ["success" (updated, properties)](#Client+event_success)
-    * ["update" (updated, properties)](#Client+event_update)
-    * ["error" (error)](#Client+event_error)
-    * ["disconnect"](#Client+event_disconnect)
+    * _instance_
+        * [.connect()](#Client+connect) ⇒ <code>Promise</code>
+        * [.disconnect()](#Client+disconnect) ⇒ <code>Promise</code>
+        * [.setProperties(properties)](#Client+setProperties) ⇒ <code>Promise</code>
+        * [.setProperty(property, value)](#Client+setProperty) ⇒ <code>Promise</code>
+        * [.getDeviceId()](#Client+getDeviceId) ⇒ <code>string</code> \| <code>null</code>
+        * ~~[.setDebug(enable)](#Client+setDebug)~~
+        * ["connect"](#Client+event_connect)
+        * ["no_response" (client)](#Client+event_no_response)
+        * ["success" (updated, properties)](#Client+event_success)
+        * ["update" (updated, properties)](#Client+event_update)
+        * ["error" (error)](#Client+event_error)
+        * ["disconnect"](#Client+event_disconnect)
+    * _static_
+        * [.discover([options])](#Client.discover) ⇒ <code>Promise.&lt;Array.&lt;DiscoveredDevice&gt;&gt;</code>
 
 <a name="new_Client_new"></a>
 
@@ -398,6 +423,31 @@ It is important to subscribe to the `error` event, otherwise the process will be
 Emitted when disconnected from the HVAC
 
 **Kind**: event emitted by [<code>Client</code>](#Client)  
+<a name="Client.discover"></a>
+
+### Client.discover([options]) ⇒ <code>Promise.&lt;Array.&lt;DiscoveredDevice&gt;&gt;</code>
+Find GREE devices on the network: broadcast a scan and collect every
+device that answers within `timeout`. Opens its own socket, so no client
+(and no binding) is needed.
+
+**Kind**: static method of [<code>Client</code>](#Client)  
+**Returns**: <code>Promise.&lt;Array.&lt;DiscoveredDevice&gt;&gt;</code> - one entry per device, in order of answer  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| [options] | <code>object</code> |  |
+| [options.host] | <code>string</code> | Address to send the scan to — your network's broadcast address. Defaults to the `host` client option. |
+| [options.port] | <code>number</code> | Defaults to the `port` client option |
+| [options.timeout] | <code>number</code> | How long to wait for answers (ms), 3000 by default |
+| [options.logLevel] | <code>string</code> | Defaults to the `logLevel` client option |
+
+**Example**  
+```js
+const devices = await Gree.Client.discover({host: '192.168.1.255'});
+// [{mac: 'f4911e000001', name: '1e000001', address: '192.168.1.42', version: 'V1.1.13', pack: {...}}]
+
+const client = new Gree.Client({host: devices[0].address});
+```
 <a name="ClientError"></a>
 
 ## ClientError ⇐ <code>Error</code>
@@ -531,6 +581,7 @@ Client options
 | pollingInterval | <code>number</code> | <code>3000</code> | Device properties polling interval |
 | pollingTimeout | <code>number</code> | <code>1000</code> | Device properties polling timeout, emits `no_response` events in case of no response from HVAC device for a status request |
 | maxNoResponse | <code>number</code> | <code>3</code> | Re-scan and re-bind the device after this many consecutive `no_response` events (the device may have dropped off WiFi, been re-paired with a new key or moved to another address). `0` disables it. |
+| silent | <code>boolean</code> | <code>false</code> | Ask the unit not to beep when it receives a command (sends the `Buzzer_ON_OFF`/`BuzzerCtrl` flags with every set request; units without a controllable beeper ignore them) |
 | logLevel | <code>string</code> | <code>&quot;error&quot;</code> | Logging level (debug, info, warn, error) |
 | debug | <code>boolean</code> | <code>false</code> | Override logLevel to debug, deprecated, use logLevel option |
 
@@ -601,6 +652,8 @@ Device properties value constants
 | powerSave.on | <code>string</code> |  |
 | safetyHeating.off | <code>string</code> |  |
 | safetyHeating.on | <code>string</code> |  |
+| antiDirectBlow.off | <code>string</code> |  |
+| antiDirectBlow.on | <code>string</code> |  |
 
 <a name="PROPERTY"></a>
 
@@ -629,11 +682,32 @@ Device properties constants
 | quiet | <code>string</code> | Controls the Quiet mode which slows down the fan to its most quiet speed. Not available in Dry and Fan mode |
 | turbo | <code>string</code> | Sets fan speed to the maximum. Fan speed cannot be changed while active and only available in Dry and Cool mode |
 | powerSave | <code>string</code> | Power saving mode |
+| safetyHeating | <code>string</code> | 8 °C heating / freeze protection |
+| antiDirectBlow | <code>string</code> | Keeps the air flow from blowing directly at people (not available on all units) |
+| outdoorTemperature | <code>string</code> | Get the outdoor unit's temperature sensor in °C (read-only; `0` when the unit has no such sensor) |
+| humidity | <code>string</code> | Get the indoor relative humidity in % (read-only; only units with a humidity sensor report it) |
+| errorCode | <code>string</code> | Get the unit's fault code, `0` when there is no fault (read-only) |
 
 <a name="PropertyMap"></a>
 
 ## PropertyMap : <code>Object.&lt;PROPERTY, (PROPERTY\_VALUE\|number)&gt;</code>
 **Kind**: global typedef  
+<a name="DiscoveredDevice"></a>
+
+## DiscoveredDevice : <code>object</code>
+A device that answered a discovery scan
+
+**Kind**: global typedef  
+**Properties**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| mac | <code>string</code> | Device MAC-address (`cid`), usable as the `mac` client option |
+| name | <code>string</code> | Device name as configured in the vendor app |
+| address | <code>string</code> | IP-address the device answered from, usable as the `host` client option |
+| [version] | <code>string</code> | Firmware version, e.g. `V1.1.13` |
+| pack | <code>object</code> | The full decrypted scan answer (brand, model, ...) |
+
 
 ## Configuration
 

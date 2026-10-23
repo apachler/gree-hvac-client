@@ -72,6 +72,12 @@ pins 20, so `nvm use` first. The library and its tests still support Node 18.
   the process (Node EventEmitter semantics).
 - `setProperty` / `setProperties` take friendly `PROPERTY` keys and `VALUE`
   enums; the transformer maps them to/from the vendor wire names.
+- Property mapping needs device state in two places: a °F `temperature` is
+  `SetTem` (°C) + `TemRec`, so `toVendor`/`fromVendor` take the current vendor
+  properties as `state`; and the optional codes (`OPTIONAL_VENDOR_CODES`) are
+  probed once per bind and polled only if answered — a probe reply must not
+  count as a poll reply.
+- `Client.discover()` is static and opens its own socket (no bind).
 - **Adding an option** touches `CLIENT_OPTIONS` + `ENV_OPTIONS` in
   `client-options.js` (env strings are coerced to the default's type),
   `.env.example`, the inline snapshot in `test/client-options.spec.js`, then

@@ -8,7 +8,10 @@ const { EncryptionService } = require('./encryption-service');
 const { PROPERTY } = require('./property');
 const { PROPERTY_VALUE } = require('./property-value');
 const { CLIENT_OPTIONS, createOptions } = require('./client-options');
-const { PropertyTransformer } = require('./property-transformer');
+const {
+    PropertyTransformer,
+    OPTIONAL_VENDOR_CODES,
+} = require('./property-transformer');
 const {
     // Imported only for the {ClientError} type in the Client#error JSDoc below.
     // ESLint 9's eslint-plugin-jsdoc no longer marks JSDoc-referenced imports
@@ -29,6 +32,13 @@ const { createLogger } = require('./logger');
 const { randomUUID } = require('crypto');
 
 /**
+ * How long Client.discover() waits for scan answers by default (ms)
+ *
+ * @private
+ */
+const DISCOVERY_TIMEOUT = 3000;
+
+/**
  * Control GREE HVAC device by getting and setting its properties
  *
  * @augments EventEmitter
@@ -36,6 +46,17 @@ const { randomUUID } = require('crypto');
 class Client extends EventEmitter {
     /**
      * @typedef {Object<PROPERTY, PROPERTY_VALUE | number>} PropertyMap
+     */
+
+    /**
+     * A device that answered a discovery scan
+     *
+     * @typedef {object} DiscoveredDevice
+     * @property {string} mac Device MAC-address (`cid`), usable as the `mac` client option
+     * @property {string} name Device name as configured in the vendor app
+     * @property {string} address IP-address the device answered from, usable as the `host` client option
+     * @property {string} [version] Firmware version, e.g. `V1.1.13`
+     * @property {object} pack The full decrypted scan answer (brand, model, ...)
      */
 
     /**
@@ -146,6 +167,15 @@ class Client extends EventEmitter {
         this._noResponseCount = 0;
 
         /**
+         * Optional vendor codes (see OPTIONAL_VENDOR_CODES) the bound device
+         * answered a probe for; only these are polled
+         *
+         * @type {Set<string>}
+         * @private
+         */
+        this._supportedOptionalCodes = new Set();
+
+        /**
          * @type {dgram.Socket|null}
          * @private
          */
@@ -233,6 +263,104 @@ class Client extends EventEmitter {
     }
 
     /**
+     * Find GREE devices on the network: broadcast a scan and collect every
+     * device that answers within `timeout`. Opens its own socket, so no client
+     * (and no binding) is needed.
+     *
+     * @param {object} [options]
+     * @param {string} [options.host] Address to send the scan to — your network's broadcast address. Defaults to the `host` client option.
+     * @param {number} [options.port] Defaults to the `port` client option
+     * @param {number} [options.timeout] How long to wait for answers (ms), 3000 by default
+     * @param {string} [options.logLevel] Defaults to the `logLevel` client option
+     * @returns {Promise<DiscoveredDevice[]>} one entry per device, in order of answer
+     * @example
+     * const devices = await Gree.Client.discover({host: '192.168.1.255'});
+     * // [{mac: 'f4911e000001', name: '1e000001', address: '192.168.1.42', version: 'V1.1.13', pack: {...}}]
+     *
+     * const client = new Gree.Client({host: devices[0].address});
+     */
+    static discover(options = {}) {
+        const { host, port, logLevel } = createOptions(options);
+        const timeout = options.timeout ?? DISCOVERY_TIMEOUT;
+        const logger = createLogger(logLevel).child({ service: 'discovery' });
+        const encryptionService = new EncryptionService(logger);
+        const devices = new Map();
+
+        return new Promise((resolve, reject) => {
+            const socket = dgram.createSocket('udp4');
+            let timer = null;
+            let done = false;
+
+            const finish = error => {
+                if (done) {
+                    return;
+                }
+                done = true;
+                clearTimeout(timer);
+                logger.info('Discovery done', { devices: devices.size });
+                try {
+                    socket.close(() =>
+                        error ? reject(error) : resolve([...devices.values()])
+                    );
+                } catch {
+                    // already closed by a socket error
+                    error ? reject(error) : resolve([...devices.values()]);
+                }
+            };
+
+            socket.on('error', error => finish(new ClientSocketError(error)));
+            socket.on('message', (buffer, rinfo) => {
+                let message = null;
+                let pack = null;
+                try {
+                    message = JSON.parse(String(buffer));
+                    pack = encryptionService.decryptGeneric(message);
+                } catch {
+                    // not JSON: not a device answer
+                }
+                if (!pack || pack.t !== 'dev') {
+                    logger.debug('Not a scan answer, ignoring', {
+                        address: rinfo.address,
+                    });
+                    return;
+                }
+
+                // Some firmwares leave cid/mac of the scan answer empty; the
+                // enclosing message still carries it (see
+                // _handleHandshakeResponse).
+                const mac = pack.cid || pack.mac || message.cid || '';
+                const key = normalizeMac(mac) || rinfo.address;
+                if (devices.has(key)) {
+                    return;
+                }
+                logger.info('Device found', { mac, address: rinfo.address });
+                devices.set(key, {
+                    mac,
+                    name: pack.name,
+                    address: rinfo.address,
+                    version: pack.ver,
+                    pack,
+                });
+            });
+
+            socket.bind(() => {
+                if (done) {
+                    return;
+                }
+                socket.setBroadcast(true);
+                const scan = Buffer.from(JSON.stringify({ t: 'scan' }));
+                logger.info('Discovery scan', { host, port, timeout });
+                socket.send(scan, 0, scan.length, port, host, error => {
+                    if (error) {
+                        finish(new ClientSocketSendError(error));
+                    }
+                });
+                timer = setTimeout(() => finish(), timeout);
+            });
+        });
+    }
+
+    /**
      * Connect to a HVAC device and start polling status changes by default
      *
      * @returns {Promise}
@@ -299,6 +427,7 @@ class Client extends EventEmitter {
             this._handshaken = false;
             this._bound = false;
             this._noResponseCount = 0;
+            this._supportedOptionalCodes = new Set();
 
             this._logger.info('Scan start', {
                 attempt: this._reconnectAttempt,
@@ -460,7 +589,17 @@ class Client extends EventEmitter {
      * });
      */
     setProperties(properties) {
-        const vendorProperties = this._transformer.toVendor(properties);
+        const vendorProperties = this._transformer.toVendor(
+            properties,
+            this._properties
+        );
+
+        if (this._options.silent) {
+            // Per-command flags, not device state: older firmwares read
+            // Buzzer_ON_OFF (1 = silent), newer ones BuzzerCtrl (0 = silent).
+            vendorProperties.Buzzer_ON_OFF = 1;
+            vendorProperties.BuzzerCtrl = 0;
+        }
 
         this._logger.info('Update request');
         return this._sendRequest({
@@ -631,10 +770,31 @@ class Client extends EventEmitter {
         this._armStatusTimeout();
 
         await this._sendRequest({
-            cols: this._transformer.arrayToVendor(Object.keys(PROPERTY)),
+            cols: this._transformer.statusColumns(this._supportedOptionalCodes),
             mac: this._cid,
             t: 'status',
         });
+    }
+
+    /**
+     * Ask the device once for each optional vendor code, one per request: a
+     * unit without the feature may answer with an empty `dat`, and a code it
+     * does answer is added to the polled columns (see _handleStatusResponse).
+     *
+     * @private
+     */
+    async _probeOptionalCodes() {
+        for (const code of OPTIONAL_VENDOR_CODES) {
+            if (!this._socket) {
+                return;
+            }
+            this._logger.debug('Probe optional property', { code });
+            await this._sendRequest({
+                cols: [code],
+                mac: this._cid,
+                t: 'status',
+            });
+        }
     }
 
     /**
@@ -899,6 +1059,12 @@ class Client extends EventEmitter {
             );
         }
 
+        // A probe that cannot be sent only means the feature stays unpolled;
+        // polling reports a network that is really down.
+        this._probeOptionalCodes().catch(error =>
+            this._logger.warn('Probe optional properties failed', { error })
+        );
+
         this.emit('connect', this);
     }
 
@@ -912,8 +1078,15 @@ class Client extends EventEmitter {
     _handleStatusResponse(pack) {
         this._logger.info('Status response');
 
-        this._clearTimer('_statusTimeoutRef');
-        this._noResponseCount = 0;
+        // The reply to a probe (see _probeOptionalCodes) says nothing about
+        // the pending poll, so it must not count as its answer.
+        const probe =
+            Array.isArray(pack.cols) &&
+            pack.cols.every(col => OPTIONAL_VENDOR_CODES.includes(col));
+        if (!probe) {
+            this._clearTimer('_statusTimeoutRef');
+            this._noResponseCount = 0;
+        }
 
         // Guard against malformed packets: some firmwares occasionally return a
         // status without the expected parallel `cols`/`dat` arrays. Iterating
@@ -936,6 +1109,9 @@ class Client extends EventEmitter {
             }
             newProperties[col] = pack.dat[i];
             this._properties[col] = pack.dat[i];
+            if (OPTIONAL_VENDOR_CODES.includes(col)) {
+                this._supportedOptionalCodes.add(col);
+            }
         });
 
         // Shallow strict-equality diff: keys whose value changed, with the new
@@ -962,12 +1138,33 @@ class Client extends EventEmitter {
         }
 
         if (Object.keys(updatedProperties).length > 0) {
+            this._addSetpoint(updatedProperties);
             this.emit(
                 'update',
-                this._transformer.fromVendor(updatedProperties),
+                this._transformer.fromVendor(
+                    updatedProperties,
+                    this._properties
+                ),
                 this._transformer.fromVendor(this._properties),
                 this
             );
+        }
+    }
+
+    /**
+     * A changed unit (`TemUn`) or `TemRec` changes the friendly
+     * `temperature` even when `SetTem` itself did not change (75 °F → 76 °F
+     * is `TemRec` 0 → 1 at `SetTem` 24), so report the setpoint along.
+     *
+     * @param {Object<string, number>} updatedProperties vendor properties, modified in place
+     * @private
+     */
+    _addSetpoint(updatedProperties) {
+        if (
+            ('TemUn' in updatedProperties || 'TemRec' in updatedProperties) &&
+            'SetTem' in this._properties
+        ) {
+            updatedProperties.SetTem = this._properties.SetTem;
         }
     }
 
@@ -1005,9 +1202,10 @@ class Client extends EventEmitter {
             this._properties[opt] = updatedProperties[opt] = values[i];
         });
 
+        this._addSetpoint(updatedProperties);
         this.emit(
             'success',
-            this._transformer.fromVendor(updatedProperties),
+            this._transformer.fromVendor(updatedProperties, this._properties),
             this._transformer.fromVendor(this._properties),
             this
         );

@@ -60,6 +60,8 @@
  * @property {string} powerSave.on
  * @property {string} safetyHeating.off
  * @property {string} safetyHeating.on
+ * @property {string} antiDirectBlow.off
+ * @property {string} antiDirectBlow.on
  */
 const PROPERTY_VALUE = {
     power: {
@@ -151,6 +153,13 @@ const PROPERTY_VALUE = {
         off: 'off',
         on: 'on',
     },
+    antiDirectBlow: {
+        off: 'off',
+        on: 'on',
+    },
+    outdoorTemperature: {},
+    humidity: {},
+    errorCode: {},
 };
 
 module.exports = {
