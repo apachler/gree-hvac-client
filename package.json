@@ -1,6 +1,6 @@
 {
   "name": "gree-hvac-client",
-  "version": "4.4.1",
+  "version": "5.0.0",
   "description": "A client for controlling Gree smart air conditioners",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",

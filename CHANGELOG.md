@@ -1,3 +1,15 @@
+# [5.0.0](https://github.com/apachler/gree-hvac-client/compare/v4.4.1...v5.0.0) (2026-11-14)
+
+
+### Features
+
+* require Node.js 20 or later ([#67](https://github.com/apachler/gree-hvac-client/issues/67)) ([485290a](https://github.com/apachler/gree-hvac-client/commit/485290ab92a68a595330eb5e6e230e87907c0d8d))
+
+
+### BREAKING CHANGES
+
+* Node.js 18 is no longer supported; gree-hvac-client now requires Node.js 20 or later.
+
 ## [4.4.1](https://github.com/apachler/gree-hvac-client/compare/v4.4.0...v4.4.1) (2026-11-14)
 
 
