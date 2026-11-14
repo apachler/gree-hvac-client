@@ -1,3 +1,10 @@
+## [4.4.1](https://github.com/apachler/gree-hvac-client/compare/v4.4.0...v4.4.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* skip non-string column/option names in device responses ([#61](https://github.com/apachler/gree-hvac-client/issues/61)) ([ee5e6ec](https://github.com/apachler/gree-hvac-client/commit/ee5e6ecb2cbf8008cf072083eba5092e8ef46810))
+
 # [4.4.0](https://github.com/apachler/gree-hvac-client/compare/v4.3.0...v4.4.0) (2026-10-23)
 
 
