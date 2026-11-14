@@ -62,7 +62,7 @@ support every Node in `engines.node` (the test matrix).
 
 ## Conventions
 
-- **Node 18+** (`engines.node`); CI matrix runs 18/20/22/24.
+- **Node 20+** (`engines.node`); CI matrix runs 20/22/24.
 - **Tests:** Jest, in `test/`. `test/support/device.js` mocks the UDP device
   (tests use fake timers), so no hardware is needed. Add a test with new behaviour.
 - **Style:** ESLint + Prettier — single quotes, 4-space JS, 2-space JSON/YAML.

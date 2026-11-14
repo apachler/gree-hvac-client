@@ -20,7 +20,7 @@ multi-split units and TypeScript types; see the [changelog](CHANGELOG.md).
 
 ## Requirements
 
-- NodeJS (>=18)
+- NodeJS (>=20)
 
 ## Installation
 
