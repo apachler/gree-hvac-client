@@ -55,9 +55,10 @@ npx jest test/connection-recovery.spec.js   # one spec file
 npx jest -t "re-bind"                       # tests whose name matches
 ```
 
-**Node version:** ESLint (and so the pre-push hook) needs Node ≥ 20.19 —
-`eslint-plugin-jsdoc` is ESM-only and Node 18 cannot `require()` it. `.nvmrc`
-pins 20, so `nvm use` first. The library and its tests still support Node 18.
+**Node version:** the lint/docs toolchain (`eslint-plugin-jsdoc` and its
+deps) wants Node ≥ 22.22, so `.nvmrc` pins 22 and the CI lint, coverage,
+audit, docs and badge jobs run on 22. The library and its tests still
+support every Node in `engines.node` (the test matrix).
 
 ## Conventions
 
@@ -189,7 +190,10 @@ fields named `key`, `psw` or `password` never reach the output.
   entry carries the sender's `port`.
 - `test/fuzz.spec.js` holds fast-check property tests: arbitrary bytes, JSON
   and encrypted packs into `_handleResponse` must only ever fail with a
-  `ClientError`. A counterexample is printed with its seed to replay.
+  `ClientError`. It runs a **fixed seed** (42) so CI is reproducible; the
+  nightly `fuzz.yml` workflow runs `FUZZ_SEED=random FUZZ_RUNS_FACTOR=100`
+  and opens/updates a "Nightly fuzz failure" issue with the seed. Replay with
+  `FUZZ_SEED=<seed> npx jest test/fuzz.spec.js`.
 - Coverage floors in `jest.config.js` sit just below the actual numbers
   (≈99.8% lines): new code needs tests or `npm run test:coverage` fails.
 - Specs mock `dgram` with `test/support/socket-mock.js`. Capture only the

@@ -14,8 +14,8 @@ participating you agree to uphold it.
 Requirements:
 
 - **Node.js 18+** (matches `engines.node`; CI tests 18/20/22/24)
-- **Node.js ≥ 20.19 for linting** — `eslint-plugin-jsdoc` is ESM-only, which
-  Node 18 cannot `require()`. `.nvmrc` pins 20, so `nvm use` picks it up.
+- **Node.js ≥ 22.22 for linting and docs** — the `eslint-plugin-jsdoc`
+  toolchain requires it. `.nvmrc` pins 22, so `nvm use` picks it up.
 
 ```bash
 git clone https://github.com/apachler/gree-hvac-client.git
