@@ -1,0 +1,68 @@
+name: fuzz
+
+# Deep, randomly seeded run of test/fuzz.spec.js. PR CI uses a fixed seed so
+# it stays reproducible; this nightly run searches with fresh seeds and 100x
+# the runs, and files an issue with the failing seed instead of turning an
+# unrelated PR red.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Harden the runner (audit outbound connections)
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: "npm"
+      - run: npm ci --ignore-scripts
+      - name: Fuzz with random seeds
+        id: fuzz
+        env:
+          FUZZ_SEED: random
+          FUZZ_RUNS_FACTOR: "100"
+        run: |
+          set -o pipefail
+          npx jest test/fuzz.spec.js --testTimeout=1500000 2>&1 | tee fuzz.log
+      - name: Report the failing seed
+        if: failure() && steps.fuzz.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "The nightly fuzz run failed: $RUN_URL"
+            echo
+            echo "Replay locally with \`FUZZ_SEED=<seed> npx jest test/fuzz.spec.js\` (seed below)."
+            echo
+            echo '```'
+            sed 's/\x1b\[[0-9;]*m//g' fuzz.log | grep -E -A3 'Property failed|seed:|Counterexample|Cause:|TypeError|Error:' | head -n 80
+            echo '```'
+          } > body.md
+          existing=$(gh issue list -R "$REPO" --state open --search 'in:title "Nightly fuzz failure"' --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" -R "$REPO" --body-file body.md
+          else
+            gh issue create -R "$REPO" --title "Nightly fuzz failure" --body-file body.md
+          fi

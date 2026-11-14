@@ -12,6 +12,17 @@ const { parseHid, firmwareWarning } = require('../src/firmware');
 
 jest.useFakeTimers();
 
+// CI runs a fixed seed, so a failure reproduces and never shows up as a
+// flake on an unrelated PR. The nightly fuzz workflow sets FUZZ_SEED=random
+// and FUZZ_RUNS_FACTOR to search much deeper; to replay one of its failures,
+// set FUZZ_SEED to the seed it reports.
+const FUZZ_SEED = process.env.FUZZ_SEED ?? '42';
+const runs = n => n * (Number(process.env.FUZZ_RUNS_FACTOR) || 1);
+fc.configureGlobal({
+    ...(FUZZ_SEED === 'random' ? {} : { seed: Number(FUZZ_SEED) }),
+    numRuns: runs(100),
+});
+
 /**
  * Property-based (fuzz) tests with fast-check: whatever arrives on the
  * socket, the client fails only with a ClientError, never with a TypeError
@@ -57,7 +68,7 @@ describe('Fuzzing', () => {
         it('survives arbitrary bytes', async () => {
             await fc.assert(
                 fc.asyncProperty(fc.string(), expectOnlyClientErrors),
-                { numRuns: 300 }
+                { numRuns: runs(300) }
             );
         });
 
@@ -66,7 +77,7 @@ describe('Fuzzing', () => {
                 fc.asyncProperty(fc.json(), json =>
                     expectOnlyClientErrors(json)
                 ),
-                { numRuns: 300 }
+                { numRuns: runs(300) }
             );
         });
 
@@ -129,7 +140,7 @@ describe('Fuzzing', () => {
                     });
                     await expectOnlyClientErrors(message);
                 }),
-                { numRuns: 500 }
+                { numRuns: runs(500) }
             );
         });
     });

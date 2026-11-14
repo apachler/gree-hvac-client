@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
       - run: npm ci --ignore-scripts
       - run: npm run lint:lockfile
@@ -69,7 +69,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
           cache: "npm"
       - run: npm ci --ignore-scripts
       - run: npm run test:coverage
@@ -87,7 +87,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
       - run: npm ci --ignore-scripts
       # Fail only on HIGH/CRITICAL advisories in production dependencies.
       - run: npm run audit
