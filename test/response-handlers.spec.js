@@ -74,6 +74,26 @@ describe('malformed response handling', () => {
             assert.equal(success, false);
         });
 
+        it('skips non-string opt entries instead of throwing', () => {
+            const SUT = makeClient();
+            let success = null;
+            SUT.on('success', updated => {
+                success = updated;
+            });
+
+            // the fast-check counterexample: coercing it to a key throws
+            // "Cannot convert object to primitive value"
+            assertNoError(SUT, () => {
+                assert.doesNotThrow(() =>
+                    SUT._handleUpdateConfirmResponse({
+                        opt: [[[{ toString: '' }]], 'Pow'],
+                        p: ['', 1],
+                    })
+                );
+            });
+            assert.deepEqual(success, { power: 'on' });
+        });
+
         it('ignores a packet whose opt is not an array', () => {
             const SUT = makeClient();
             assertNoError(SUT, () => {
@@ -94,6 +114,24 @@ describe('malformed response handling', () => {
 
             SUT._handleStatusResponse({ cols: ['Pow'], dat: [1] });
 
+            assert.deepEqual(updated, { power: 'on' });
+        });
+
+        it('skips non-string cols entries instead of throwing', () => {
+            const SUT = makeClient();
+            let updated = null;
+            SUT.on('update', changed => {
+                updated = changed;
+            });
+
+            assertNoError(SUT, () => {
+                assert.doesNotThrow(() =>
+                    SUT._handleStatusResponse({
+                        cols: [[{ toString: '' }], 'Pow'],
+                        dat: [0, 1],
+                    })
+                );
+            });
             assert.deepEqual(updated, { power: 'on' });
         });
 
