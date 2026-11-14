@@ -1,0 +1,53 @@
+name: dependabot auto-merge
+
+# Turns on auto-merge (squash) for low-risk Dependabot PRs; GitHub merges
+# them once the ruleset's required checks pass. Eligible: npm updates where
+# every dependency is a dev dependency or a lockfile-only (indirect) one and
+# none is a semver-major bump. Production dependencies, majors and
+# github-actions bumps stay manual (the GITHUB_TOKEN may not merge changes
+# to workflow files anyway).
+#
+# The merge is done by the GITHUB_TOKEN, so it starts no further workflow
+# run on master; the next human merge releases as usual. These are build
+# commits, which never release by themselves.
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Harden the runner (audit outbound connections)
+        uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # v2.22.2
+        with:
+          egress-policy: audit
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      - name: Decide
+        id: decide
+        env:
+          ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+          DEPS: ${{ steps.meta.outputs.updated-dependencies-json }}
+        run: |
+          eligible=false
+          if [ "$ECOSYSTEM" = "npm_and_yarn" ] && printf '%s' "$DEPS" | jq -e '
+              length > 0 and all(.[];
+                (.dependencyType == "direct:development" or .dependencyType == "indirect")
+                and .updateType != "version-update:semver-major")' >/dev/null; then
+            eligible=true
+          fi
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          echo "ecosystem=$ECOSYSTEM eligible=$eligible"
+      - name: Enable auto-merge
+        if: steps.decide.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"

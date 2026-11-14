@@ -225,6 +225,11 @@ do), creates the **git tag** and the **GitHub Release**, and attaches the packed
 hand-edit `version` or `CHANGELOG.md`** — semantic-release owns them.
 
 `feat` → minor, `fix` → patch, `build(deps-dev)` (Dependabot) → no release.
+Dependabot runs monthly; `dependabot-auto-merge.yml` turns on auto-merge for
+its non-major dev and lockfile-only npm PRs (production deps, majors and
+github-actions bumps stay manual). Those merges are made by `GITHUB_TOKEN`
+and so start no workflow on master. The squash commit message is the **PR
+body**, so a breaking change needs `BREAKING CHANGE: …` in the PR body.
 `master` is the only branch: work on a feature branch, squash-merge the PR.
 
 The `master` ruleset blocks deletion and force-pushes and requires a PR with
