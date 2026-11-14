@@ -69,8 +69,5 @@
   "bugs": {
     "url": "https://github.com/apachler/gree-hvac-client/issues"
   },
-  "homepage": "https://github.com/apachler/gree-hvac-client#readme",
-  "overrides": {
-    "npm": "^11.21.2"
-  }
+  "homepage": "https://github.com/apachler/gree-hvac-client#readme"
 }
