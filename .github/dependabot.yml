@@ -1,9 +1,12 @@
 version: 2
 updates:
+  # Monthly and grouped to keep PR noise down; security updates still come
+  # as soon as an advisory is published. Dev and lockfile-only updates are
+  # auto-merged (dependabot-auto-merge.yml).
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     # Let new releases age a few days before proposing them (security
     # updates skip this), so a compromised publish is likely pulled first.
     cooldown:
