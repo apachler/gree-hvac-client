@@ -13,7 +13,7 @@ participating you agree to uphold it.
 
 Requirements:
 
-- **Node.js 18+** (matches `engines.node`; CI tests 18/20/22/24)
+- **Node.js 20+** (matches `engines.node`; CI tests 20/22/24)
 - **Node.js ≥ 22.22 for linting and docs** — the `eslint-plugin-jsdoc`
   toolchain requires it. `.nvmrc` pins 22, so `nvm use` picks it up.
 
@@ -81,7 +81,7 @@ npx jest -t "re-bind"          # only tests whose name matches
 - **Tests:** Jest. Add specs next to the existing ones in `test/`. New behaviour
   should come with a test; `test/support/device.js` mocks the UDP device so you
   can test without hardware.
-- **Node version:** keep changes compatible with Node 18+.
+- **Node version:** keep changes compatible with Node 20+.
 
 ## Commit & PR conventions
 
