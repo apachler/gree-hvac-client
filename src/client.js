@@ -62,6 +62,19 @@ const WIFI_SETUP_TIMEOUT = 5000;
 const WIFI_SETUP_HOST = '192.168.1.1';
 
 /**
+ * Whether a column/option name from a device packet can be used as a
+ * property key. A non-string (e.g. a nested array holding an object without
+ * a callable toString) throws a TypeError when coerced to a key, and
+ * `__proto__` would replace the target object's prototype.
+ *
+ * @param {unknown} key
+ * @returns {boolean}
+ * @private
+ */
+const isPropertyKey = key =>
+    typeof key === 'string' && key !== '' && key !== '__proto__';
+
+/**
  * Control GREE HVAC device by getting and setting its properties
  *
  * @augments EventEmitter
@@ -1947,7 +1960,7 @@ class Client extends EventEmitter {
             const values = {};
             if (Array.isArray(pack.cols) && Array.isArray(pack.dat)) {
                 pack.cols.forEach((col, i) => {
-                    if (col && i < pack.dat.length) {
+                    if (isPropertyKey(col) && i < pack.dat.length) {
                         values[col] = pack.dat[i];
                     }
                 });
@@ -2018,9 +2031,9 @@ class Client extends EventEmitter {
         const oldProperties = { ...this._properties };
         const newProperties = {};
         pack.cols.forEach((col, i) => {
-            // a cut-short answer may carry a column without a name; a
-            // `__proto__` one would replace the object's prototype
-            if (!col || col === '__proto__' || i >= pack.dat.length) {
+            // a cut-short answer may carry a column without a name, a
+            // corrupt one a non-string (see isPropertyKey)
+            if (!isPropertyKey(col) || i >= pack.dat.length) {
                 return;
             }
             newProperties[col] = pack.dat[i];
@@ -2127,7 +2140,7 @@ class Client extends EventEmitter {
 
         const updatedProperties = {};
         pack.opt.forEach((opt, i) => {
-            if (opt === '__proto__' || i >= values.length) {
+            if (!isPropertyKey(opt) || i >= values.length) {
                 return;
             }
             this._properties[opt] = updatedProperties[opt] = values[i];
